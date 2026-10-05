@@ -1,0 +1,45 @@
+.receipt-page { max-width: 1040px; margin: auto; }
+.page-heading { margin-bottom: 26px; }
+.eyebrow { color: #078642; font-size: 11px; font-weight: 700; letter-spacing: 1.8px; }
+.page-heading h1 { margin: 10px 0; font-size: clamp(24px, 3vw, 30px); letter-spacing: -1px; }
+.page-heading p, .muted { color: #64748b; font-size: 14px; line-height: 1.7; }
+.receipt-steps { display: flex; list-style: none; gap: 20px; margin-bottom: 24px; font-size: 13px; color: #64748b; }
+.receipt-steps li { display: flex; align-items: center; gap: 8px; }
+.receipt-steps b { border-radius: 50%; width: 26px; height: 26px; display: grid; place-items: center; background: #e5eaf0; }
+.receipt-steps [aria-current] { color: #078642; font-weight: 600; }
+.receipt-steps [aria-current] b { background: #078642; color: white; }
+.receipt-card { background: white; border: 1px solid #e1e7ee; border-radius: 16px; padding: 24px; min-width: 0; }
+.receipt-card h2 { font-size: 17px; }
+.card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.mock-badge { font-size: 11px; color: #637487; background: #f0f4f8; padding: 5px 9px; border-radius: 6px; white-space: nowrap; }
+.upload-zone { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 24px; border: 2px dashed #cddbd3; border-radius: 12px; background: #fbfdfb; padding: 32px 16px; text-align: center; }
+.upload-zone.dragging { border-color: #078642; background: #e9f9ef; }
+.upload-symbol { display: grid; place-items: center; width: 52px; height: 52px; background: #e9f9ef; color: #078642; font-size: 32px; border-radius: 14px; }
+.upload-zone h3 { font-size: 17px; }
+.upload-zone p, .file-hint { font-size: 12px; color: #64748b; line-height: 1.6; overflow-wrap: anywhere; }
+.receipt-preview { max-width: 100%; height: 280px; object-fit: contain; }
+.file-details { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 13px; }
+.file-details span { overflow-wrap: anywhere; min-width: 0; }
+.file-details small { color: #64748b; }
+.receipt-tip { padding: 16px; margin-top: 24px; background: #f6f8fb; border-radius: 8px; font-size: 13px; line-height: 1.8; }
+.receipt-tip p { color: #64748b; margin-top: 4px; }
+.form-actions { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #edf0f4; }
+.button { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: 8px; border: 1px solid transparent; text-decoration: none; }
+.primary { background: #078642; color: white; }
+.primary:hover:not(:disabled) { background: #066b35; }
+.secondary { background: white; border-color: #d5dfda; color: #17683e; }
+.button:disabled { background: #e6eaee; color: #7a8593; cursor: not-allowed; }
+.text-button { color: #52677c; border: 0; background: none; font-size: 13px; text-decoration: underline; min-height: 44px; display: inline-flex; align-items: center; }
+.error-message { color: #b42318; font-size: 13px; margin-top: 16px; line-height: 1.6; }
+.review-grid { display: grid; gap: 20px; }
+.review-preview { width: 100%; max-height: 520px; object-fit: contain; background: #f6f8fb; border-radius: 8px; margin: 20px 0 12px; }
+.review-form fieldset { border: 0; display: grid; gap: 20px; margin-top: 24px; min-width: 0; }
+.review-form label { display: grid; gap: 8px; font-size: 13px; font-weight: 600; }
+.review-form input, .review-form textarea { width: 100%; min-width: 0; padding: 12px; border: 1px solid #d5dde6; border-radius: 8px; background: white; color: #233349; font-size: 16px; }
+.review-form textarea { resize: vertical; }
+.empty-state { text-align: center; padding: 48px 24px; }
+.empty-state h1 { margin: 16px 0; font-size: 24px; }
+.empty-state p { color: #64748b; margin-bottom: 20px; line-height: 1.7; }
+@media (min-width: 650px) { .form-actions { flex-direction: row; align-items: center; justify-content: space-between; } .receipt-card { padding: 28px; } }
+@media (min-width: 1100px) { .review-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.review-form select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #d5dde6; border-radius: 8px; background: white; color: #233349; font: inherit; font-size: 16px; }

@@ -1,0 +1,42 @@
+.user-dashboard .heading-row { margin-bottom: 28px; }
+.user-dashboard .page-heading h1 { margin-top: 0; }
+.dashboard-summaries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 32px; }
+.dashboard-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px; color: #233349; background: white; border: 1px solid #e1e7ee; border-radius: 12px; text-align: left; }
+.dashboard-summary:hover, .dashboard-summary.selected { border-color: #078642; background: #f8fcfa; }
+.dashboard-summary > span { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #64748b; }
+.summary-dot { width: 7px; height: 7px; border-radius: 50%; background: #dc9b2c; flex-shrink: 0; }
+.dot-APPROVED { background: #078642; }
+.dot-REJECTED { background: #d96656; }
+.dot-SETTLED { background: #5c82bd; }
+.dashboard-summary strong { font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.dashboard-summary small { font-size: 12px; font-weight: 400; color: #758195; margin-left: 5px; }
+.dashboard-list { background: white; border: 1px solid #e1e7ee; border-radius: 16px; padding: 24px; }
+.dashboard-list-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; }
+.dashboard-list-heading h2 { font-size: 17px; }
+.user-dashboard .filter-tabs { margin: 0; gap: 4px; }
+.submission-cards { list-style: none; }
+.submission-cards > li + li { border-top: 1px solid #edf0f4; }
+.submission-card { display: flex; align-items: center; width: 100%; min-width: 0; gap: 20px; padding: 22px 12px; border: 0; border-radius: 8px; background: white; color: #233349; text-align: left; }
+.submission-card:hover { background: #f6faf8; }
+.submission-main { flex: 1; min-width: 0; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.submission-main > strong { font-size: 16px; font-weight: 650; }
+.submission-purpose { font-size: 13px; color: #64748b; line-height: 1.7; }
+.submission-category { color: #758195; }
+.submission-date { font-size: 12px; color: #8a96a5; }
+.submission-side { display: grid; justify-items: end; gap: 12px; flex-shrink: 0; }
+.submission-amount { font-size: 16px; font-variant-numeric: tabular-nums; }
+.submission-chevron { font-size: 26px; color: #99a6b4; }
+@media (max-width: 1100px) { .dashboard-summary { padding: 18px 16px; flex-direction: column; align-items: flex-start; gap: 10px; } }
+@media (max-width: 600px) {
+  .dashboard-summaries { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
+  .dashboard-summary { flex-direction: row; align-items: center; padding: 18px 14px; }
+  .dashboard-summary > span { font-size: 12px; gap: 6px; }
+  .dashboard-summary strong { font-size: 24px; }
+  .dashboard-list { padding: 18px 12px; }
+  .dashboard-list-heading { padding: 0 4px; gap: 14px; }
+  .user-dashboard .filter-tabs button { padding: 8px 10px; }
+  .submission-card { position: relative; flex-wrap: wrap; gap: 12px; padding: 20px 8px; }
+  .submission-main { flex-basis: 100%; padding-right: 20px; }
+  .submission-side { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; }
+  .submission-chevron { position: absolute; top: 20px; right: 6px; }
+}

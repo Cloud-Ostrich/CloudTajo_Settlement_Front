@@ -1,0 +1,23 @@
+.receipt-upload-page { max-width: 840px; }
+.receipt-upload-page .upload-zone { margin-top: 16px; padding: 20px 16px; gap: 10px; }
+.receipt-upload-page .upload-symbol { width: 40px; height: 40px; font-size: 26px; border-radius: 10px; }
+.receipt-upload-page .upload-zone h3 { font-size: 15px; }
+.receipt-upload-page .file-hint { order: 1; }
+.receipt-upload-page .upload-zone .button { order: 2; margin-top: 2px; }
+.receipt-upload-page .receipt-preview { width: 100%; height: 240px; border-radius: 8px; }
+.receipt-upload-page .file-details { padding: 0 4px; }
+.receipt-upload-page .review-form fieldset { border-top: 1px solid #edf0f4; padding-top: 24px; gap: 20px; }
+.receipt-upload-page #purpose { min-height: 48px; line-height: 1.5; }
+.receipt-upload-page #memo { min-height: 94px; line-height: 1.5; }
+.receipt-upload-page .upload-submit-note { margin-top: 20px; font-size: 12px; }
+.receipt-upload-page .upload-actions { flex-direction: row; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.receipt-upload-page .upload-actions .button { min-width: 100px; }
+.receipt-upload-page .upload-actions [aria-disabled=true] { opacity: .6; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .receipt-upload-page .receipt-card { padding: 20px 16px; }
+  .receipt-upload-page .receipt-preview { height: 220px; }
+  .receipt-upload-page .upload-actions .primary { flex: 1; }
+  .receipt-upload-page .receipt-steps { gap: 16px; font-size: 12px; }
+}
+/* 공유 폼 input 스타일이 숨겨진 파일 입력의 크기를 확장하지 않도록 제한합니다. */
+.receipt-upload-page #receipt-file { width: 1px; height: 1px; padding: 0; border: 0; }

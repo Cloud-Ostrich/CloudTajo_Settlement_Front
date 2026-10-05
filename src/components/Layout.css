@@ -1,0 +1,7 @@
+.app-layout { min-height: 100vh; background: #f6f8fb; }
+.main-area { min-width: 0; }
+.page-content { max-width: 1240px; margin: auto; padding: 28px 20px 48px; }
+.menu-backdrop { position: fixed; inset: 0; background: #152a4266; border: 0; z-index: 30; }
+.skip-link { position: fixed; top: -100px; left: 16px; z-index: 100; padding: 12px; background: white; }
+.skip-link:focus { top: 12px; }
+@media (min-width: 900px) { .main-area { margin-left: 240px; } .page-content { padding: 40px; } .menu-backdrop { display: none; } }

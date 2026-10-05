@@ -1,0 +1,24 @@
+.receipt-detail-dialog > .card-heading { padding-bottom: 16px; border-bottom: 1px solid #edf0f4; margin-bottom: 22px; }
+.receipt-detail-dialog .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 0; border-radius: 50%; color: #64748b; background: transparent; }
+.receipt-detail-dialog .modal-close:hover { background: #f0f4f2; color: #078642; }
+.receipt-detail-dialog .modal-close:focus-visible { outline: 2px solid #078642; outline-offset: 2px; }
+.receipt-detail-dialog .receipt-detail-info { background: #f8fafb; border: 1px solid #edf0f4; border-radius: 12px; padding: 20px; }
+.receipt-detail-dialog .detail-fields { margin-top: 14px; gap: 14px; }
+.receipt-detail-dialog .section-title { margin-top: 22px; font-size: 14px; }
+.receipt-detail-dialog .review-grid > div:first-child > .section-title { margin-top: 0; }
+.receipt-detail-dialog .review-preview { margin-top: 12px; }
+.receipt-detail-dialog .rejection-note { border: 1px solid #f1d1cc; margin-top: 24px; }
+.receipt-timeline { list-style: none; margin-top: 18px; padding: 0; }
+.receipt-timeline li { position: relative; display: flex; justify-content: space-between; gap: 16px; padding: 0 0 24px 24px; font-size: 13px; }
+.receipt-timeline li::before { content: ''; position: absolute; top: 5px; left: 0; width: 9px; height: 9px; border-radius: 50%; background: #078642; box-shadow: 0 0 0 3px #e9f9ef; }
+.receipt-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 18px; bottom: 0; left: 4px; width: 1px; background: #d5e8dd; }
+.receipt-timeline li:last-child { padding-bottom: 0; }
+.timeline-content { min-width: 0; overflow-wrap: anywhere; }
+.timeline-content strong { font-weight: 600; }
+.timeline-content p { color: #64748b; font-size: 12px; margin-top: 6px; line-height: 1.7; white-space: pre-wrap; }
+.receipt-timeline time { flex-shrink: 0; color: #758195; font-size: 12px; }
+@media (max-width: 600px) {
+  .receipt-detail-dialog .receipt-detail-info { padding: 16px; }
+  .receipt-timeline li { flex-wrap: wrap; gap: 6px; }
+  .receipt-timeline time { max-width: 100%; }
+}
