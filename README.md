@@ -1,5 +1,7 @@
 
-# DuesFlow
+# 구름정산소
+
+내부 프로젝트명: `CloudTajo_Settlement`
 
 영수증 OCR 기반 회비·지출 정산 관리 서비스입니다.
 
