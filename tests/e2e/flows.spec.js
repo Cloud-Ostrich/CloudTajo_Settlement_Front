@@ -46,6 +46,8 @@ test('신규 제출/미리보기/상세/OCR_PENDING 유지, 두 USER 분리 및 
   await expect(dialog.getByText('김민서', { exact: true })).toBeVisible();
   await expect(dialog.getByText('원본 확인용 메모', { exact: true })).toBeVisible();
   await expect(dialog.locator('img')).toBeVisible();
+  await expect(dialog.locator('.receipt-timeline time').first()).toHaveAttribute('datetime', /T/);
+  await expect(dialog.locator('.receipt-timeline')).not.toContainText('Invalid Date');
   await expect(dialog.getByRole('heading', { name: 'OCR 결과' })).toHaveCount(0);
   await expect(dialog.locator('input,textarea')).toHaveCount(0);
   await dialog.getByRole('button', { name: '영수증 상세 닫기' }).click();
@@ -75,6 +77,8 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   const row = await selectAdmin(page, '카페 그린브릿지');
   const detail = page.locator('.approval-detail');
   await expect(detail.locator('img')).toBeVisible();
+  await expect(detail.locator('.receipt-timeline time').first()).toHaveAttribute('datetime', /T/);
+  await expect(detail.locator('.receipt-timeline')).not.toContainText('Invalid Date');
   await detail.getByRole('button', { name: 'OCR 수정', exact: true }).click();
   await detail.getByLabel('사용처', { exact: true }).fill('E2E 보정 카페');
   await detail.getByLabel('총 금액 (원)', { exact: true }).fill('18900');

@@ -1,5 +1,15 @@
 export const STATUS_LABELS = { SUBMITTED: '제출 완료', OCR_PENDING: 'OCR 처리 중', OCR_DONE: 'OCR 완료', REVIEWING: '검토 중', APPROVED: '승인', REJECTED: '반려', SETTLED: '정산 완료' };
-export const CATEGORIES = [{ id: 1, name: '식비' }, { id: 2, name: '교통비' }, { id: 3, name: '인쇄비' }, { id: 4, name: '소모품비' }, { id: 5, name: '기타' }];
+export const CATEGORIES = [
+  { id: 1, name: '식비', description: '식사 및 음료', active: true },
+  { id: 2, name: '교통비', description: '교통 및 이동', active: true },
+  { id: 3, name: '인쇄비', description: '인쇄 및 제작', active: true },
+  { id: 4, name: '소모품비', description: '운영 소모품', active: true },
+  { id: 5, name: '기타', description: '기타 지출', active: true },
+];
+export const HISTORY_ACTION_LABELS = {
+  SUBMITTED: '영수증 제출', OCR_RETRY_REQUESTED: 'OCR 재처리 요청', OCR_COMPLETED: 'OCR 처리 완료',
+  OCR_UPDATED: 'OCR 결과 수정', APPROVED: '관리자 승인', REJECTED: '관리자 반려', SETTLED: '정산 완료',
+};
 export const RECEIPT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 export const REVIEWABLE = ['OCR_DONE', 'REVIEWING'];

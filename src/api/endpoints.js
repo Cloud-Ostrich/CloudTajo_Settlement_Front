@@ -5,17 +5,21 @@ export async function login(email, password) {
   setSession(response.data);
   return response;
 }
+export const getCurrentUser = () => apiRequest({ method: 'GET', url: '/users/me' });
 export const getCategories = () => apiRequest({ method: 'GET', url: '/categories' });
-export const getMyReceipts = () => apiRequest({ method: 'GET', url: '/receipts/my' });
-export const getAdminReceipts = () => apiRequest({ method: 'GET', url: '/admin/receipts' });
+export const getMyReceipts = (params = {}) => apiRequest({ method: 'GET', url: '/receipts/my', params });
+export const getAdminReceipts = (params = {}) => apiRequest({ method: 'GET', url: '/admin/receipts', params });
 export const getReceipt = (receiptId) => apiRequest({ method: 'GET', url: `/receipts/${receiptId}` });
+export const retryOcr = (receiptId) => mutation({ method: 'POST', url: `/receipts/${receiptId}/ocr/retry` });
+export const getReceiptHistories = (receiptId) => apiRequest({ method: 'GET', url: `/receipts/${receiptId}/histories` });
+export const getReceiptDuplicates = (receiptId) => apiRequest({ method: 'GET', url: `/admin/receipts/${receiptId}/duplicates` });
 export const getAdminSummary = (month) => apiRequest({ method: 'GET', url: '/admin/dashboard/summary', params: { month } });
 export function submitReceipt({ image, purpose, categoryId, memo }) {
   const data = new FormData();
   data.append('image', image);
   data.append('purpose', purpose);
   data.append('categoryId', String(categoryId));
-  if (memo) data.append('memo', memo);
+  data.append('memo', memo || '');
   return mutation({ method: 'POST', url: '/receipts', headers: { 'Content-Type': 'multipart/form-data' }, data });
 }
 async function mutation(config) {

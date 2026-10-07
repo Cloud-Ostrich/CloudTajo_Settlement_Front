@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { approveReceipt, rejectReceipt, settleReceipt, updateOcr } from '../api/endpoints';
-import { REVIEWABLE, money, today } from '../api/contracts';
+import { HISTORY_ACTION_LABELS, REVIEWABLE, money, today } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
@@ -30,21 +30,35 @@ function DetailActions({ receipt, onRefresh }) {
   return <><div className="card-heading section-title"><h3>OCR 결과</h3>{reviewable && <button className="text-button" disabled={busy} onClick={edit}>OCR 수정</button>}</div><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName || '인식 대기'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt || '인식 대기'}</dd></div><div><dt>총 금액</dt><dd className="detail-amount">{money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.confidence == null ? '인식 대기' : `${Math.round(receipt.confidence * 100)}%`}</dd></div></dl>{editing && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); run(() => updateOcr(receipt.receiptId, { ...values, amount: Number(values.amount) }), 'OCR 결과를 수정했습니다.'); }}><fieldset disabled={busy}>{[['merchantName', '사용처', 'text'], ['paidAt', '결제일', 'date'], ['amount', '총 금액 (원)', 'text']].map(([name, label, type]) => <label key={name}>{label}<input type={type} value={values[name]} inputMode={name === 'amount' ? 'numeric' : undefined} pattern={name === 'amount' ? '[0-9]+' : undefined} required onChange={(e) => setValues({ ...values, [name]: e.target.value })} /></label>)}<label>수정 사유 (필수)<textarea value={values.reason} required maxLength={500} onChange={(e) => setValues({ ...values, reason: e.target.value })} rows={3} /></label></fieldset><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setEditing(false)}>취소</button><button className="button primary" disabled={busy}>OCR 수정 저장</button></div></form>}{reviewable && !editing && <div className="review-form"><label className="section-title">검토 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={500} disabled={busy} /></label><div className="decision-actions"><button className="button danger" disabled={busy} onClick={() => setRejecting(true)}>반려</button><button className="button primary" disabled={busy || rejecting} onClick={() => run(() => approveReceipt(receipt.receiptId, { comment }), '요청을 승인했습니다.')}>승인</button></div></div>}{rejecting && reviewable && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); run(() => rejectReceipt(receipt.receiptId, { rejectReason }), '사유와 함께 반려했습니다.'); }}><label>반려 사유 (필수)<textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} required maxLength={500} rows={3} disabled={busy} placeholder="영수증 이미지가 흐려 금액 확인이 어렵습니다." /></label><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setRejecting(false)}>취소</button><button className="button danger" disabled={busy || !rejectReason.trim()}>반려 처리</button></div></form>}{receipt.status === 'APPROVED' && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); run(() => settleReceipt(receipt.receiptId, { settledAt, comment }), '정산 완료 처리했습니다.'); }}><fieldset disabled={busy}><label>정산일<input type="date" value={settledAt} onChange={(e) => setSettledAt(e.target.value)} required /></label><label>정산 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={2} /></label></fieldset><button className="button primary" disabled={busy}>정산 완료 처리</button></form>}{['SUBMITTED', 'OCR_PENDING'].includes(receipt.status) && <p className="receipt-tip">OCR 처리가 완료되면 검토할 수 있습니다.</p>}{busy && <p className="muted" role="status">처리 중…</p>}{error && <p className="error-message" role="alert">{error}</p>}{notice && <p className="success-message" role="status">{notice}</p>}</>;
 }
 function ApprovalDetail({ id }) {
-  const { data: receipt, error, reload } = useApiData(`/receipts/${id}`);
+  const { data: response, error, reload } = useApiData(`/receipts/${id}`);
+  const { data: histories } = useApiData(`/receipts/${id}/histories`);
   if (error) return <section className="receipt-card"><p role="alert">{error}</p><button className="text-button" onClick={reload}>다시 시도</button></section>;
-  if (!receipt) return <section className="receipt-card" role="status">상세 정보를 불러오는 중…</section>;
+  if (!response) return <section className="receipt-card" role="status">상세 정보를 불러오는 중…</section>;
+  const timeline = (histories || []).map((item) => ({
+    ...item,
+    label: HISTORY_ACTION_LABELS[item.action] || item.action,
+    comment: item.snapshot?.comment || '',
+  }));
+  const receipt = {
+    ...response,
+    user: response.submitter,
+    confidence: response.ocrResult?.confidence ?? null,
+    history: timeline,
+    rejectReason: [...timeline].reverse().find((item) => item.action === 'REJECTED')?.reason || '',
+    settledAt: [...timeline].reverse().find((item) => item.action === 'SETTLED')?.snapshot?.settledAt || null,
+  };
   return <section className="receipt-card approval-detail" aria-label="영수증 검토 상세"><div className="card-heading"><h2>제출 상세 #{receipt.receiptId}</h2><StatusBadge status={receipt.status} /></div>
     <div className="admin-review-columns"><div className="admin-original"><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div><div className="admin-review-info">
     <h3 className="section-title">제출 정보</h3><dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div><div><dt>제출자</dt><dd>{receipt.user.name}</dd></div><div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
     <DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={reload} />{receipt.status === 'REJECTED' && receipt.rejectReason && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason}</p></div>}{receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
     </div></div>
-    {!!receipt.history?.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{receipt.history.map((item, index) => <li key={index}><div className="timeline-content"><strong>{item.label === 'Mock OCR 완료' ? 'OCR 처리 완료' : item.label}</strong>{(item.reason || item.comment) && <p>{item.reason || item.comment}</p>}</div><time dateTime={item.at}>{new Date(item.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol></>}
+    {!!receipt.history?.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{receipt.history.map((item, index) => <li key={index}><div className="timeline-content"><strong>{item.label === 'Mock OCR 완료' ? 'OCR 처리 완료' : item.label}</strong>{(item.reason || item.comment) && <p>{item.reason || item.comment}</p>}</div><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol></>}
   </section>;
 
 }
 export default function AdminApproval() {
   const { data, error, reload } = useApiData('/admin/receipts');
-  const receipts = data || [];
+  const receipts = (data?.items || []).map((item) => ({ ...item, user: { name: item.submitterName } }));
   const [filter, setFilter] = useState('all');
   const [selectedId, setSelectedId] = useState(null);
   const detailRef = useRef(null);

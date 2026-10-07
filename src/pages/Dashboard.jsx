@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { STATUS_LABELS, money, SUBMISSION_SUMMARIES, matchesSubmissionFilter } from '../api/contracts';
+import { HISTORY_ACTION_LABELS, STATUS_LABELS, money, SUBMISSION_SUMMARIES, matchesSubmissionFilter } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
@@ -10,6 +10,10 @@ import './Dashboard.css';
 import './ReceiptDetail.css';
 function ReceiptDetail({ id, onClose }) {
   const { data: receipt, error, reload } = useApiData(`/receipts/${id}`);
+  const { data: histories } = useApiData(`/receipts/${id}/histories`);
+  const timeline = histories || [];
+  const rejection = [...timeline].reverse().find((item) => item.action === 'REJECTED');
+  const settlement = [...timeline].reverse().find((item) => item.action === 'SETTLED');
   const dialogRef = useRef(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -17,7 +21,7 @@ function ReceiptDetail({ id, onClose }) {
     return () => dialog.close();
   }, []);
   const processing = receipt && ['SUBMITTED', 'OCR_PENDING'].includes(receipt.status);
-  const hasOcr = receipt && !processing && [receipt.merchantName, receipt.paidAt, receipt.amount, receipt.confidence].some((value) => value != null);
+  const hasOcr = receipt && !processing && [receipt.merchantName, receipt.paidAt, receipt.amount, receipt.ocrResult?.confidence].some((value) => value != null);
   return <dialog ref={dialogRef} className="receipt-detail-dialog" aria-labelledby="receipt-detail-title" onCancel={onClose}>
     <div className="card-heading"><h2 id="receipt-detail-title">영수증 상세</h2><button type="button" className="modal-close" onClick={onClose} aria-label="영수증 상세 닫기"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
     {error ? <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p> : !receipt ? <p role="status">상세 정보를 불러오는 중…</p> : <>
@@ -25,23 +29,23 @@ function ReceiptDetail({ id, onClose }) {
         <div><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div>
         <div className="receipt-detail-info"><StatusBadge status={receipt.status} /><h3 className="section-title">제출 정보</h3><dl className="detail-fields">
           <div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div>
-          <div><dt>제출자</dt><dd>{receipt.user.name}</dd></div>
+          <div><dt>제출자</dt><dd>{receipt.submitter.name}</dd></div>
           <div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div>
           <div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>
           {receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}
         </dl>
-        {processing ? <p className="receipt-tip" role="status">{receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.'}</p> : hasOcr ? <><h3 className="section-title">OCR 결과</h3><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName ?? '인식 결과 없음'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt ?? '인식 결과 없음'}</dd></div><div><dt>총 금액</dt><dd>{receipt.amount == null ? '인식 결과 없음' : money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.confidence == null ? '인식 결과 없음' : `${Math.round(receipt.confidence * 100)}%`}</dd></div></dl></> : <p className="receipt-tip">OCR 결과가 없습니다.</p>}
-        {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason || '등록된 반려 사유가 없습니다.'}</p></div>}
-        {receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
+        {processing ? <p className="receipt-tip" role="status">{receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.'}</p> : hasOcr ? <><h3 className="section-title">OCR 결과</h3><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName ?? '인식 결과 없음'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt ?? '인식 결과 없음'}</dd></div><div><dt>총 금액</dt><dd>{receipt.amount == null ? '인식 결과 없음' : money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.ocrResult?.confidence == null ? '인식 결과 없음' : `${Math.round(receipt.ocrResult.confidence * 100)}%`}</dd></div></dl></> : <p className="receipt-tip">OCR 결과가 없습니다.</p>}
+        {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p>{rejection?.reason || '등록된 반려 사유가 없습니다.'}</p></div>}
+        {settlement?.snapshot?.settledAt && <p className="muted">정산일 · {settlement.snapshot.settledAt}</p>}
         </div>
       </div>
-      {!!receipt.history?.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{receipt.history.map((item, index) => <li key={`${item.at}-${index}`}><div className="timeline-content"><strong>{item.label === 'Mock OCR 완료' ? 'OCR 처리 완료' : item.label}</strong>{(item.reason || item.comment) && <p>{item.reason || item.comment}</p>}</div><time dateTime={item.at}>{new Date(item.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</time></li>)}</ol></>}
+      {!!timeline.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{timeline.map((item) => <li key={item.id}><div className="timeline-content"><strong>{HISTORY_ACTION_LABELS[item.action] || item.action}</strong>{(item.reason || item.snapshot?.comment) && <p>{item.reason || item.snapshot.comment}</p>}</div><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</time></li>)}</ol></>}
     </>}
   </dialog>;
 }
 function Dashboard() {
   const { data, error, reload } = useApiData('/receipts/my');
-  const receipts = data || [];
+  const receipts = data?.items || [];
   const [filter, setFilter] = useState('all');
   const [selectedId, setSelectedId] = useState(null);
   const visible = receipts.filter((r) => matchesSubmissionFilter(r, filter));

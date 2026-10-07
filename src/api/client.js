@@ -2,7 +2,7 @@ import axios from 'axios';
 import { mockAdapter } from './mockBackend.js';
 import { getSession } from './mockStore.js';
 
-// 현재는 Mock만 사용합니다. 실제 연결 시 adapter 설정만 제거합니다.
+// 현재는 Mock만 사용합니다. 추후 연결 절차는 docs/api-contract.md를 참고합니다.
 export const apiClient = axios.create({ baseURL: '/api', adapter: mockAdapter });
 apiClient.interceptors.request.use((config) => {
   const token = getSession()?.accessToken;
