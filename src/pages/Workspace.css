@@ -68,7 +68,8 @@
 .history-list time { color: #64748b; }
 .login-page { min-height: 100vh; display: grid; }
 .login-story { padding: 32px 24px; background: #edf9f2; }
-.login-story .logo { margin-bottom: 40px; }
+.login-story .logo { gap: 12px; margin-bottom: 40px; }
+.login-story .logo-icon { flex-basis: 62px; width: 62px; height: 62px; }
 .login-story h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.4; letter-spacing: -1px; margin: 12px 0 16px; }
 .login-story > p { font-size: 14px; color: #52677c; line-height: 1.8; }
 .login-flow { display: grid; gap: 12px; list-style: none; margin: 32px 0; }
