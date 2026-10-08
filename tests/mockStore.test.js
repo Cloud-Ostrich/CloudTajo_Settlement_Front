@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { File as NodeFile } from 'node:buffer';
-import { beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'node:test';
 class MemoryStorage {
   data = new Map();
   getItem(key) { return this.data.get(key) ?? null; }
@@ -30,13 +30,18 @@ globalThis.indexedDB = { open() {
 const api = await import('../src/api/endpoints.js');
 const store = await import('../src/api/mockStore.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
+const originalConsoleError = console.error;
+let apiErrorLogs;
 const { STATUS_LABELS } = await import('../src/api/contracts.js');
 const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequests.js');
 beforeEach(() => {
+  apiErrorLogs = [];
+  console.error = (...args) => apiErrorLogs.push(args);
   store.logout();
   store.writeReceipts(structuredClone(DEFAULT_REQUESTS));
   images.clear();
 });
+afterEach(() => { console.error = originalConsoleError; });
 function envelope(response) { assert.equal(response.success, true); assert.equal(typeof response.message, 'string'); assert.ok('data' in response); }
 const input = (purpose) => ({ image: new File([purpose], 'receipt.png', { type: 'image/png' }), purpose, categoryId: 1, memo: '테스트 메모' });
 const code = (value) => (error) => { assert.equal(error.errorCode, value); assert.equal(error.response.data.success, false); assert.equal(error.response.data.errorCode, value); return true; };
@@ -46,8 +51,8 @@ function listShape(item) {
 }
 
 test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER 조회', async () => {
-  await assert.rejects(api.getMyReceipts(), code('UNAUTHORIZED'));
-  await assert.rejects(api.login('user1@test.com', 'wrong'), code('INVALID_CREDENTIALS'));
+  await assert.rejects(api.getMyReceipts(), code('AUTH_REQUIRED'));
+  await assert.rejects(api.login('user1@test.com', 'wrong'), code('AUTH_REQUIRED'));
   const login = await api.login('user1@test.com', '1234'); envelope(login);
   assert.deepEqual(login.data.user, { id: 1, name: '김민서', email: 'user1@test.com', role: 'USER' });
   assert.equal(typeof login.data.accessToken, 'string'); assert.ok(!('password' in login.data.user));
@@ -84,8 +89,8 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   assert.equal(initialDetail.memo, '테스트 메모'); assert.ok(initialDetail.imageUrl.startsWith('data:image/png'));
   store.logout(); await api.login('user2@test.com', '1234');
   assert.ok((await api.getMyReceipts()).data.items.every((r) => r.receiptId !== first.data.receiptId));
-  await assert.rejects(api.getReceipt(first.data.receiptId), code('FORBIDDEN'));
-  await assert.rejects(api.updateOcr(first.data.receiptId, {}), code('FORBIDDEN'));
+  await assert.rejects(api.getReceipt(first.data.receiptId), code('FORBIDDEN_ROLE'));
+  await assert.rejects(api.updateOcr(first.data.receiptId, {}), code('FORBIDDEN_ROLE'));
   const second = await api.submitReceipt(input('이준호 행사 준비'));
   store.logout(); const admin = await api.login('admin@test.com', '1234');
   assert.equal(admin.data.user.role, 'ADMIN');
@@ -93,7 +98,7 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   const all = allResponse.data.items;
   assert.ok(all.some((r) => r.receiptId === first.data.receiptId && r.submitterId === 1 && r.submitterName === '김민서'));
   assert.ok(all.some((r) => r.receiptId === second.data.receiptId && r.submitterId === 2 && r.submitterName === '이준호'));
-  await assert.rejects(api.approveReceipt(first.data.receiptId, { comment: '확인' }), code('INVALID_STATUS'));
+  await assert.rejects(api.approveReceipt(first.data.receiptId, { comment: '확인' }), code('INVALID_STATUS_TRANSITION'));
   // 시간이 지나거나 목록/상세를 반복 조회해도 신규 제출은 처리 중으로 유지합니다.
   const realNow = Date.now;
   Date.now = () => realNow() + 60000;
@@ -119,11 +124,11 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   assert.deepEqual(approved.data, { receiptId: sampleMinseo, status: 'APPROVED' });
   await assert.rejects(api.rejectReceipt(sampleJunho, { rejectReason: ' ' }), code('VALIDATION_ERROR'));
   await api.rejectReceipt(sampleJunho, { rejectReason: '참석자 명단 필요' });
-  await assert.rejects(api.settleReceipt(sampleJunho, { settledAt: '2026-10-05', comment: '' }), code('INVALID_STATUS'));
+  await assert.rejects(api.settleReceipt(sampleJunho, { settledAt: '2026-10-05', comment: '' }), code('INVALID_STATUS_TRANSITION'));
   const settled = await api.settleReceipt(sampleMinseo, { settledAt: '2026-10-05', comment: '회비 정산 완료' });
   assert.equal(settled.data.status, 'SETTLED'); assert.equal(settled.data.settlement.settledAt, '2026-10-05');
   assert.equal(settled.data.settlement.settledBy, 3); assert.equal(settled.data.settlement.comment, '회비 정산 완료');
-  await assert.rejects(api.updateOcr(sampleMinseo, { merchantName: '수정', paidAt: '2026-10-05', amount: 1, reason: '보정' }), code('INVALID_STATUS'));
+  await assert.rejects(api.updateOcr(sampleMinseo, { merchantName: '수정', paidAt: '2026-10-05', amount: 1, reason: '보정' }), code('INVALID_STATUS_TRANSITION'));
   const summary = await api.getAdminSummary('2026-10'); envelope(summary);
   assert.deepEqual(Object.keys(summary.data).sort(), ['month', 'totalAmount', 'approvedAmount', 'pendingCount', 'rejectedCount', 'settledCount', 'categoryStats'].sort());
   assert.ok(summary.data.categoryStats.every((category) => 'amount' in category && 'count' in category && !('totalAmount' in category)));
@@ -150,9 +155,9 @@ test('기본 영수증 동일 경로 및 잘못된 요청/권한/상태 거부',
   await api.rejectReceipt(105, { rejectReason: '기본 요청 반려' });
   assert.equal((await api.getReceipt(101)).data.status, 'SETTLED');
   assert.equal((await api.getReceipt(105)).data.status, 'REJECTED');
-  await assert.rejects(api.approveReceipt(105, {}), code('INVALID_STATUS'));
+  await assert.rejects(api.approveReceipt(105, {}), code('INVALID_STATUS_TRANSITION'));
   await api.login('user1@test.com', '1234');
-  await assert.rejects(api.getAdminSummary(), code('FORBIDDEN'));
+  await assert.rejects(api.getAdminSummary(), code('FORBIDDEN_ROLE'));
   await assert.rejects(api.submitReceipt({ ...input(''), categoryId: 999 }), code('VALIDATION_ERROR'));
   await assert.rejects(apiRequest({ method: 'POST', url: '/receipts', data: { purpose: 'test' } }), code('INVALID_REQUEST'));
 });
@@ -199,10 +204,65 @@ test('고정 계정 3개 로그인 및 USER의 모든 ADMIN API 접근 금지', 
   }
   for (const email of ['user1@test.com', 'user2@test.com']) {
     await api.login(email, '1234');
-    for (const attempt of [() => api.getAdminReceipts(), () => api.getAdminSummary(), () => api.updateOcr(101, { merchantName: '수정', paidAt: '2026-10-05', amount: 1000, reason: '보정' }), () => api.approveReceipt(101, {}), () => api.rejectReceipt(101, { rejectReason: '사유' }), () => api.settleReceipt(102, { settledAt: '2026-10-05', comment: '' })]) await assert.rejects(attempt(), code('FORBIDDEN'));
+    for (const attempt of [() => api.getAdminReceipts(), () => api.getAdminSummary(), () => api.updateOcr(101, { merchantName: '수정', paidAt: '2026-10-05', amount: 1000, reason: '보정' }), () => api.approveReceipt(101, {}), () => api.rejectReceipt(101, { rejectReason: '사유' }), () => api.settleReceipt(102, { settledAt: '2026-10-05', comment: '' })]) await assert.rejects(attempt(), code('FORBIDDEN_ROLE'));
     const foreignId = email === 'user1@test.com' ? 105 : 101;
-    await assert.rejects(api.getReceipt(foreignId), code('FORBIDDEN'));
+    await assert.rejects(api.getReceipt(foreignId), code('FORBIDDEN_ROLE'));
   }
+});
+
+test('API 오류를 사용자 메시지로 정규화하고 상세 로그에서 비밀값을 제거', async () => {
+  await assert.rejects(api.login('unknown@test.com', 'wrong-secret'), (error) => {
+    assert.equal(error.errorCode, 'AUTH_REQUIRED');
+    assert.equal(error.message, '이메일 또는 비밀번호를 확인해주세요.');
+    return true;
+  });
+  await api.login('user1@test.com', '1234');
+  await assert.rejects(api.getAdminReceipts(), (error) => {
+    assert.equal(error.errorCode, 'FORBIDDEN_ROLE');
+    assert.equal(error.message, '접근 권한이 없습니다.');
+    return true;
+  });
+  await assert.rejects(apiRequest({ method: 'POST', url: '/receipts', headers: { 'X-Mock-Failure': 'FILE_UPLOAD_FAILED' }, data: new FormData() }), (error) => {
+    assert.equal(error.errorCode, 'FILE_UPLOAD_FAILED');
+    assert.equal(error.message, '영수증 등록에 실패했습니다. 다시 시도해주세요.');
+    return true;
+  });
+  await assert.rejects(apiRequest({ method: 'POST', url: '/receipts/101/ocr/retry', headers: { 'X-Mock-Failure': 'OCR_FAILED' } }), (error) => {
+    assert.equal(error.errorCode, 'OCR_FAILED');
+    assert.equal(error.message, '영수증 인식에 실패했습니다. 다시 시도해주세요.');
+    return true;
+  });
+  await assert.rejects(api.getReceipt(999999), (error) => {
+    assert.equal(error.errorCode, 'RECEIPT_NOT_FOUND');
+    assert.equal(error.message, '정보를 불러오지 못했습니다. 다시 시도해주세요.');
+    return true;
+  });
+  await api.login('admin@test.com', '1234');
+  await assert.rejects(api.settleReceipt(101, { settledAt: '2026-10-05', comment: '' }), (error) => {
+    assert.equal(error.errorCode, 'INVALID_STATUS_TRANSITION');
+    assert.equal(error.message, '처리에 실패했습니다. 다시 시도해주세요.');
+    return true;
+  });
+  await assert.rejects(apiRequest({ method: 'POST', url: '/unexpected', headers: { 'X-Mock-Failure': 'UNEXPECTED_API_ERROR' } }), (error) => {
+    assert.equal(error.message, '오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    return true;
+  });
+  await assert.rejects(apiRequest({ method: 'GET', url: '/unexpected-read', headers: { 'X-Mock-Failure': 'UNEXPECTED_API_ERROR' } }), (error) => {
+    assert.equal(error.message, '오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    return true;
+  });
+
+  const password = 'sensitive-password-value';
+  const token = store.getSession().accessToken;
+  await assert.rejects(apiClient.request({
+    method: 'POST', url: '/error-echo', data: { password },
+    adapter: async (config) => ({ data: { success: false, message: `Echo ${password} Bearer ${token}`, errorCode: 'UNEXPECTED_API_ERROR' }, status: 503, statusText: 'Unavailable', headers: {}, config }),
+  }));
+  const logs = JSON.stringify(apiErrorLogs);
+  assert.ok(logs.includes('/receipts/101/ocr/retry'));
+  assert.ok(logs.includes('FILE_UPLOAD_FAILED'));
+  assert.ok(!logs.includes(password));
+  assert.ok(!logs.includes(token));
 });
 
 test('memo 생략 제출 및 필수 이미지/목적/카테고리 검증', async () => {

@@ -9,6 +9,12 @@ Base URL은 `/api`이며 요청 인터셉터가 로그인 응답의 `accessToken
 컴포넌트는 `useApiData`로 조회하며 변경 API 성공 후 재조회합니다. 신규 제출과 OCR 재시도는 `OCR_PENDING`을 반환하며 Mock OCR을 자동 실행하지 않습니다.
 로그인 상태는 `{ accessToken, user: { id, name, email, role } }`로 저장합니다.
 
+## 실패 처리
+
+`src/api/client.js`는 공통 실패 envelope를 받아 `errorCode`와 endpoint/method에 맞는 사용자용 한글 메시지로 `Error.message`를 정규화합니다. 페이지는 이 메시지만 표시하고 복잡한 서버 메시지는 화면에 노출하지 않습니다.
+실패 로그는 Console에 endpoint, method, HTTP status, `errorCode`, 정제된 server message를 기록합니다. 요청 body와 header 전체는 로그에 남기지 않으며, message에 반사된 password/accessToken/Authorization 값도 마스킹합니다.
+Mock 실패 테스트는 요청 header `X-Mock-Failure`로 `FILE_UPLOAD_FAILED`, `OCR_FAILED`, `UNEXPECTED_API_ERROR`를 지정할 수 있습니다. 이 header는 Mock adapter에서만 사용하며 정상 요청 흐름에는 영향을 주지 않습니다.
+
 | 메서드 | 경로 | 요청 | `data` 응답 |
 | --- | --- | --- | --- |
 | POST | /api/auth/login | `{ email, password }` | `{ accessToken, user: { id, name, email, role } }` |

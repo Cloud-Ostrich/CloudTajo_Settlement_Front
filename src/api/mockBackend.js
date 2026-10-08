@@ -7,8 +7,8 @@ const ok = (data, message = '요청이 처리되었습니다.') => ({ success: t
 function fail(message, errorCode) { throw Object.assign(new Error(message), { errorCode }); }
 function requireUser(headers, role) {
   const session = getSession();
-  if (!session || headers.get('Authorization') !== `Bearer ${session.accessToken}`) fail('로그인해주세요.', 'UNAUTHORIZED');
-  if (role && session.user.role !== role) fail('접근 권한이 없습니다.', 'FORBIDDEN');
+  if (!session || headers.get('Authorization') !== `Bearer ${session.accessToken}`) fail('로그인해주세요.', 'AUTH_REQUIRED');
+  if (role && session.user.role !== role) fail('접근 권한이 없습니다.', 'FORBIDDEN_ROLE');
   return session.user;
 }
 function categoryName(r) { return CATEGORIES.find((c) => c.id === r.categoryId)?.name || '기타'; }
@@ -45,9 +45,13 @@ async function dispatch(config) {
   const method = config.method.toUpperCase();
   const path = config.url;
   const data = body(config);
+  const forcedFailure = config.headers.get('X-Mock-Failure');
+  if (forcedFailure === 'FILE_UPLOAD_FAILED' && path === '/receipts' && method === 'POST') fail('Mock upload storage failure.', forcedFailure);
+  if (forcedFailure === 'OCR_FAILED' && /\/ocr\/retry$/.test(path) && method === 'POST') fail('Mock OCR provider failure.', forcedFailure);
+  if (forcedFailure === 'UNEXPECTED_API_ERROR') fail('Mock unexpected server failure.', forcedFailure);
   if (path === '/auth/login' && method === 'POST') {
     const account = MOCK_ACCOUNTS.find((u) => u.email === String(data.email).trim().toLowerCase() && u.password === data.password);
-    if (!account) fail('이메일 또는 비밀번호를 확인해주세요.', 'INVALID_CREDENTIALS');
+    if (!account) fail('인증에 실패했습니다.', 'AUTH_REQUIRED');
     return ok({ accessToken: `mock-token-${account.id}`, user: publicUser(account) }, '로그인되었습니다.');
   }
   const user = requireUser(config.headers, path.startsWith('/admin/') ? 'ADMIN' : null);
@@ -75,7 +79,7 @@ async function dispatch(config) {
     if (!(image instanceof File) || !RECEIPT_IMAGE_TYPES.includes(image.type) || image.size > MAX_RECEIPT_SIZE || !purpose || !CATEGORIES.some((c) => c.id === categoryId)) fail('이미지, 사용 목적, 카테고리를 확인해주세요.', 'VALIDATION_ERROR');
     const receiptId = nextReceiptId++;
     await saveImage(receiptId, image);
-    if (getSession()?.user.id !== user.id) fail('로그인 계정이 변경되었습니다.', 'UNAUTHORIZED');
+    if (getSession()?.user.id !== user.id) fail('로그인 계정이 변경되었습니다.', 'AUTH_REQUIRED');
     const createdAt = new Date().toISOString();
     const receipt = { receiptId, userId: user.id, userName: user.name, purpose, categoryId, memo, merchantName: null, paidAt: null, amount: null, confidence: null, status: 'OCR_PENDING', createdAt, rejectReason: '', settledAt: null, image: { storage: 'indexeddb', key: receiptId }, fileName: image.name, contentType: image.type, fileSize: image.size, history: [] };
     receipt.history.push(historyRecord(receipt, user.id, 'SUBMITTED', null, 'OCR_PENDING'));
@@ -85,14 +89,14 @@ async function dispatch(config) {
   const historiesMatch = path.match(/^\/receipts\/(\d+)\/histories$/);
   if (historiesMatch && method === 'GET') {
     const receipt = readReceipts().find((item) => item.receiptId === Number(historiesMatch[1]));
-    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'NOT_FOUND');
-    if (user.role !== 'ADMIN' && receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN');
+    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'RECEIPT_NOT_FOUND');
+    if (user.role !== 'ADMIN' && receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN_ROLE');
     return ok(receipt.history);
   }
   const duplicatesMatch = path.match(/^\/admin\/receipts\/(\d+)\/duplicates$/);
   if (duplicatesMatch && method === 'GET') {
     const receipt = readReceipts().find((item) => item.receiptId === Number(duplicatesMatch[1]));
-    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'NOT_FOUND');
+    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'RECEIPT_NOT_FOUND');
     const normalizedMerchant = receipt.merchantName?.trim().toLowerCase();
     const items = readReceipts().filter((candidate) => candidate.receiptId !== receipt.receiptId && receipt.amount != null && candidate.amount === receipt.amount && normalizedMerchant && candidate.merchantName?.trim().toLowerCase() === normalizedMerchant)
       .map((candidate) => ({ id: `${receipt.receiptId}-${candidate.receiptId}`, receiptId: receipt.receiptId, candidateReceiptId: candidate.receiptId, matchReason: '동일 사용처와 금액', score: 1 }));
@@ -102,9 +106,9 @@ async function dispatch(config) {
   if (retryMatch && method === 'POST') {
     requireUser(config.headers, 'USER');
     const receipt = readReceipts().find((item) => item.receiptId === Number(retryMatch[1]));
-    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'NOT_FOUND');
-    if (receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN');
-    if (!['OCR_DONE', 'REVIEWING'].includes(receipt.status)) fail('OCR 재처리할 수 없는 상태입니다.', 'INVALID_STATUS');
+    if (!receipt) fail('영수증을 찾을 수 없습니다.', 'RECEIPT_NOT_FOUND');
+    if (receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN_ROLE');
+    if (!['OCR_DONE', 'REVIEWING'].includes(receipt.status)) fail('OCR 재처리할 수 없는 상태입니다.', 'INVALID_STATUS_TRANSITION');
     const next = { ...receipt, merchantName: null, paidAt: null, amount: null, confidence: null, status: 'OCR_PENDING' };
     next.history = [...receipt.history, historyRecord(receipt, user.id, 'OCR_RETRY_REQUESTED', receipt.status, 'OCR_PENDING')];
     writeReceipts(readReceipts().map((item) => item.receiptId === next.receiptId ? next : item));
@@ -118,8 +122,8 @@ async function dispatch(config) {
   const match = path.match(/^\/(?:admin\/)?receipts\/(\d+)(?:\/(ocr|approve|reject|settle))?$/);
   if (!match) fail('지원하지 않는 API입니다.', 'NOT_FOUND');
   const receipt = readReceipts().find((r) => r.receiptId === Number(match[1]));
-  if (!receipt) fail('영수증을 찾을 수 없습니다.', 'NOT_FOUND');
-  if (user.role !== 'ADMIN' && receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN');
+  if (!receipt) fail('영수증을 찾을 수 없습니다.', 'RECEIPT_NOT_FOUND');
+  if (user.role !== 'ADMIN' && receipt.userId !== user.id) fail('접근 권한이 없습니다.', 'FORBIDDEN_ROLE');
   if (!match[2] && method === 'GET') return ok(await detail(receipt));
   requireUser(config.headers, 'ADMIN');
   if (!path.startsWith('/admin/')) fail('지원하지 않는 API입니다.', 'NOT_FOUND');
@@ -127,12 +131,12 @@ async function dispatch(config) {
   if ((action === 'ocr' && method !== 'PATCH') || (action !== 'ocr' && method !== 'POST')) fail('지원하지 않는 메서드입니다.', 'METHOD_NOT_ALLOWED');
   let patch, historyAction, historyReason = '', snapshot = {};
   if (action === 'settle') {
-    if (receipt.status !== 'APPROVED') fail('승인된 영수증만 정산 완료할 수 있습니다.', 'INVALID_STATUS');
+    if (receipt.status !== 'APPROVED') fail('승인된 영수증만 정산 완료할 수 있습니다.', 'INVALID_STATUS_TRANSITION');
     if (!validDate(data.settledAt)) fail('정산일을 확인해주세요.', 'VALIDATION_ERROR');
     patch = { status: 'SETTLED', settledAt: data.settledAt, settledBy: user.id, settlementComment: data.comment || '' };
     historyAction = 'SETTLED'; snapshot = { settledAt: data.settledAt, comment: data.comment || '' };
   } else {
-    if (!REVIEWABLE.includes(receipt.status)) fail('OCR 완료 또는 검토 중인 영수증만 처리할 수 있습니다.', 'INVALID_STATUS');
+    if (!REVIEWABLE.includes(receipt.status)) fail('OCR 완료 또는 검토 중인 영수증만 처리할 수 있습니다.', 'INVALID_STATUS_TRANSITION');
     if (action === 'ocr') {
       if (!data.merchantName?.trim() || !validDate(data.paidAt) || !Number.isSafeInteger(data.amount) || data.amount <= 0 || !data.reason?.trim()) fail('OCR 정보와 수정 사유를 확인해주세요.', 'VALIDATION_ERROR');
       patch = { merchantName: data.merchantName.trim(), paidAt: data.paidAt, amount: data.amount, status: 'REVIEWING' };
