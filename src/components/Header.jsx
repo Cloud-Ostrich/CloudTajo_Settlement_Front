@@ -2,7 +2,7 @@ import { useLocation } from 'react-router-dom';
 import './Header.css';
 import { Link } from 'react-router-dom';
 import { useSession } from '../hooks/useMockData';
-import { logout } from '../api/mockStore';
+import { logout } from '../api/session';
 const titles = { '/dashboard': '내 제출 현황', '/admin/dashboard': '운영 대시보드', '/receipts/new': '영수증 등록', '/ocr/review': 'OCR 결과 확인', '/admin/approvals': '승인 관리' };
 function Header({ menuOpen, onToggleMenu }) {
   const { pathname } = useLocation();

@@ -1,5 +1,6 @@
 import { apiRequest } from './client.js';
-import { invalidateQueries, setSession } from './mockStore.js';
+import { invalidateQueries } from './mockStore.js';
+import { setSession } from './session.js';
 export async function login(email, password) {
   const response = await apiRequest({ method: 'POST', url: '/auth/login', data: { email, password } });
   setSession(response.data);

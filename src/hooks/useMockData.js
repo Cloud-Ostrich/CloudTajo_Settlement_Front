@@ -1,7 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { getRevision, getSession, subscribe } from '../api/mockStore';
+import { getRevision, subscribe } from '../api/mockStore';
+import { getSession, subscribe as subscribeSession } from '../api/session';
 import { apiRequest } from '../api/client';
-export function useSession() { return useSyncExternalStore(subscribe, getSession); }
+export function useSession() { return useSyncExternalStore(subscribeSession, getSession); }
 // 변경 API의 invalidate 이벤트와 수동 재시도에서 재조회합니다.
 export function useApiData(url) {
   const revision = useSyncExternalStore(subscribe, getRevision);

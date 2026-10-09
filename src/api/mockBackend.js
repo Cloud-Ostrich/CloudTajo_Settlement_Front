@@ -1,6 +1,7 @@
 import { MOCK_ACCOUNTS, publicUser } from './mockAccounts.js';
 import { CATEGORIES, MAX_RECEIPT_SIZE, RECEIPT_IMAGE_TYPES, REVIEWABLE, today } from './contracts.js';
-import { getSession, readReceipts, writeReceipts } from './mockStore.js';
+import { readReceipts, writeReceipts } from './mockStore.js';
+import { getSession } from './session.js';
 import { saveImage, imageUrl } from './mockImages.js';
 let nextReceiptId = Math.max(100, ...readReceipts().map((r) => r.receiptId)) + 1;
 const ok = (data, message = '요청이 처리되었습니다.') => ({ success: true, message, data });

@@ -29,6 +29,7 @@ globalThis.indexedDB = { open() {
 } };
 const api = await import('../src/api/endpoints.js');
 const store = await import('../src/api/mockStore.js');
+const sessionStore = await import('../src/api/session.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
 const originalConsoleError = console.error;
 let apiErrorLogs;
@@ -37,7 +38,7 @@ const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequ
 beforeEach(() => {
   apiErrorLogs = [];
   console.error = (...args) => apiErrorLogs.push(args);
-  store.logout();
+  sessionStore.logout();
   store.writeReceipts(structuredClone(DEFAULT_REQUESTS));
   images.clear();
 });
@@ -49,6 +50,21 @@ function listShape(item) {
   assert.deepEqual(Object.keys(item).sort(), ['receiptId', 'purpose', 'categoryId', 'categoryName', 'status', 'merchantName', 'paidAt', 'amount', 'memo'].sort());
   assert.equal(typeof item.receiptId, 'number'); assert.ok(STATUS_LABELS[item.status]);
 }
+
+test('세션 저장/조회/로그아웃은 기존 키와 구독 동작 유지', () => {
+  let notifications = 0;
+  const unsubscribe = sessionStore.subscribe(() => { notifications++; });
+  const value = { accessToken: 'test-token', user: { id: 1, name: '김민서', role: 'USER' } };
+  sessionStore.setSession(value);
+  assert.equal(session.getItem('duesflow.session.v2'), JSON.stringify(value));
+  assert.deepEqual(sessionStore.getSession(), value);
+  assert.equal(notifications, 1);
+  sessionStore.logout();
+  assert.equal(session.getItem('duesflow.session.v2'), null);
+  assert.equal(sessionStore.getSession(), null);
+  assert.equal(notifications, 2);
+  unsubscribe();
+});
 
 test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER 조회', async () => {
   await assert.rejects(api.getMyReceipts(), code('AUTH_REQUIRED'));
@@ -87,12 +103,12 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   assert.equal(initialHistory.data[0].action, 'SUBMITTED');
   assert.ok(Number.isFinite(Date.parse(initialHistory.data[0].createdAt)));
   assert.equal(initialDetail.memo, '테스트 메모'); assert.ok(initialDetail.imageUrl.startsWith('data:image/png'));
-  store.logout(); await api.login('user2@test.com', '1234');
+  sessionStore.logout(); await api.login('user2@test.com', '1234');
   assert.ok((await api.getMyReceipts()).data.items.every((r) => r.receiptId !== first.data.receiptId));
   await assert.rejects(api.getReceipt(first.data.receiptId), code('FORBIDDEN_ROLE'));
   await assert.rejects(api.updateOcr(first.data.receiptId, {}), code('FORBIDDEN_ROLE'));
   const second = await api.submitReceipt(input('이준호 행사 준비'));
-  store.logout(); const admin = await api.login('admin@test.com', '1234');
+  sessionStore.logout(); const admin = await api.login('admin@test.com', '1234');
   assert.equal(admin.data.user.role, 'ADMIN');
   const allResponse = await api.getAdminReceipts(); envelope(allResponse);
   const all = allResponse.data.items;
@@ -132,14 +148,15 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   const summary = await api.getAdminSummary('2026-10'); envelope(summary);
   assert.deepEqual(Object.keys(summary.data).sort(), ['month', 'totalAmount', 'approvedAmount', 'pendingCount', 'rejectedCount', 'settledCount', 'categoryStats'].sort());
   assert.ok(summary.data.categoryStats.every((category) => 'amount' in category && 'count' in category && !('totalAmount' in category)));
-  store.logout(); await api.login('user1@test.com', '1234');
+  sessionStore.logout(); await api.login('user1@test.com', '1234');
   assert.equal((await api.getMyReceipts()).data.items.find((r) => r.receiptId === sampleMinseo).status, 'SETTLED');
   assert.equal((await api.getReceipt(sampleMinseo)).data.amount, 18900);
-  store.logout(); await api.login('user2@test.com', '1234');
+  sessionStore.logout(); await api.login('user2@test.com', '1234');
   assert.equal((await api.getReceiptHistories(sampleJunho)).data.at(-1).reason, '참석자 명단 필요');
-  const restored = await import(`../src/api/mockStore.js?reload=${Date.now()}`);
-  assert.equal(restored.getSession().user.name, '이준호');
-  assert.equal(restored.readReceipts().find((r) => r.receiptId === second.data.receiptId).status, 'OCR_PENDING');
+  const restoredSession = await import(`../src/api/session.js?reload=${Date.now()}`);
+  const restoredStore = await import(`../src/api/mockStore.js?reload=${Date.now()}`);
+  assert.equal(restoredSession.getSession().user.name, '이준호');
+  assert.equal(restoredStore.readReceipts().find((r) => r.receiptId === second.data.receiptId).status, 'OCR_PENDING');
 });
 
 test('기본 영수증 동일 경로 및 잘못된 요청/권한/상태 거부', async () => {
@@ -200,7 +217,7 @@ test('고정 계정 3개 로그인 및 USER의 모든 ADMIN API 접근 금지', 
   for (const [email, name, role] of [['user1@test.com', '김민서', 'USER'], ['user2@test.com', '이준호', 'USER'], ['admin@test.com', '관리자', 'ADMIN']]) {
     const response = await api.login(email, '1234');
     assert.equal(response.data.user.name, name); assert.equal(response.data.user.role, role);
-    store.logout();
+    sessionStore.logout();
   }
   for (const email of ['user1@test.com', 'user2@test.com']) {
     await api.login(email, '1234');
@@ -253,7 +270,7 @@ test('API 오류를 사용자 메시지로 정규화하고 상세 로그에서 �
   });
 
   const password = 'sensitive-password-value';
-  const token = store.getSession().accessToken;
+  const token = sessionStore.getSession().accessToken;
   await assert.rejects(apiClient.request({
     method: 'POST', url: '/error-echo', data: { password },
     adapter: async (config) => ({ data: { success: false, message: `Echo ${password} Bearer ${token}`, errorCode: 'UNEXPECTED_API_ERROR' }, status: 503, statusText: 'Unavailable', headers: {}, config }),
@@ -292,7 +309,7 @@ test('모든 상태 enum과 상세 OCR 결과, 수정 이력 영속성', async (
   for (const key of ['merchantName', 'paidAt', 'amount']) assert.equal(corrected[key], edit[key]);
   assert.equal((await api.getReceiptHistories(101)).data.at(-1).reason, edit.reason);
   assert.equal(corrected.status, 'REVIEWING');
-  store.logout(); await api.login('user1@test.com', '1234');
+  sessionStore.logout(); await api.login('user1@test.com', '1234');
   assert.equal((await api.getReceipt(101)).data.amount, edit.amount);
 });
 
