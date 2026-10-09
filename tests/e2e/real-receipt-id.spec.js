@@ -5,6 +5,12 @@ const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID로 호출', async ({ page }) => {
   const requestedPaths = [];
   const keyWarnings = [];
+  const imageUrl = 'https://kr.object.ncloudstorage.com/test/receipt.png';
+  await page.route(imageUrl, (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/png',
+    body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64'),
+  }));
   page.on('console', (message) => {
     if (message.text().includes('Each child in a list should have a unique "key" prop')) keyWarnings.push(message.text());
   });
@@ -19,7 +25,7 @@ realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID�
     } else if (pathname === '/api/receipts/my') {
       data = { items: [{ id: 701, purpose: 'ID 필드 영수증', categoryId: 1, categoryName: '식비', status: 'OCR_DONE', merchantName: 'Real 응답 가게', paidAt: '2026-10-07', amount: 5000, memo: '' }], totalCount: 1 };
     } else if (pathname === '/api/receipts/701') {
-      data = { id: 701, submitterId: 1, categoryId: 1, purpose: 'ID 필드 영수증', status: 'OCR_DONE', merchantName: 'Real 응답 가게', paidAt: '2026-10-07', amount: 5000, memo: '', file: null, ocrResult: null, imageUrl: null };
+      data = { id: 701, submitterId: 1, categoryId: 1, purpose: 'ID 필드 영수증', status: 'OCR_DONE', merchantName: 'Real 응답 가게', paidAt: '2026-10-07', amount: 5000, memo: '', file: { url: imageUrl }, ocrResult: null, imageUrl: 'https://fallback.invalid/receipt.png' };
     } else if (pathname === '/api/receipts/701/histories') {
       data = [];
     } else {
@@ -39,6 +45,11 @@ realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID�
   await expect(page.getByText('#701', { exact: true })).toBeVisible();
   await expect(dialog.getByText('제출자', { exact: true })).toHaveCount(0);
   await expect(dialog.locator('.detail-fields').getByText('식비', { exact: true })).toBeVisible();
+  const image = dialog.locator('img.review-preview');
+  await expect(image).toHaveAttribute('src', imageUrl);
+  await expect.poll(() => image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(0);
+  await image.evaluate((element) => element.dispatchEvent(new Event('error')));
+  await expect(dialog.getByText('원본 이미지를 불러올 수 없습니다.', { exact: true })).toBeVisible();
   await expect.poll(() => requestedPaths).toContain('/api/receipts/701');
   await expect.poll(() => requestedPaths).toContain('/api/receipts/701/histories');
   await expect.poll(() => requestedPaths).toContain('/api/categories');
