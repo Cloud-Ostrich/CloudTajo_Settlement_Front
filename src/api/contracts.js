@@ -33,6 +33,11 @@ export function shiftMonth(month, offset) {
   const shiftedMonth = ((absoluteMonth % 12) + 12) % 12 + 1;
   return `${shiftedYear}-${String(shiftedMonth).padStart(2, '0')}`;
 }
+export function formatReviewMinutes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '집계 정보 없음';
+  const rounded = Number(value.toFixed(1));
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}분`;
+}
 export function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
 export const SUBMISSION_SUMMARIES = [

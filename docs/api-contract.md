@@ -31,7 +31,7 @@ Mock 실패 테스트는 요청 header `X-Mock-Failure`로 `FILE_UPLOAD_FAILED`,
 | POST | /api/admin/receipts/{receiptId}/reject | `{ rejectReason }` | `{ receiptId, status: "REJECTED" }` |
 | POST | /api/admin/receipts/{receiptId}/settle | `{ settledAt, comment }` | `{ receiptId, status: "SETTLED", settlement: { id, settledBy, settledAt, comment } }` |
 | GET | /api/admin/receipts/{receiptId}/duplicates | 없음 | `[{ id, receiptId, candidateReceiptId, matchReason, score }]` |
-| GET | /api/admin/dashboard/summary | `month` | `{ month, totalAmount, approvedAmount, pendingCount, rejectedCount, settledCount, categoryStats: [{ categoryId, categoryName, amount, count }] }` |
+| GET | /api/admin/dashboard/summary | `month` | Real: `{ month, totalAmount, pendingCount, rejectedCount, averageReviewMinutes, categorySummaries }`; Mock: `{ month, totalAmount, approvedAmount, pendingCount, rejectedCount, settledCount, averageReviewMinutes, categoryStats }` |
 
 상태는 SUBMITTED, OCR_PENDING, OCR_DONE, REVIEWING, APPROVED, REJECTED, SETTLED만 사용합니다.
 제출 시 OCR_PENDING을 반환하며 해당 상태와 null OCR 결과를 계속 유지합니다. 이후 관리자 처리 테스트는 기본 OCR_DONE/REVIEWING 샘플을 사용합니다.
@@ -44,7 +44,7 @@ Mock에서는 OCR_DONE/REVIEWING 건을 수정·승인·반려할 수 있고, AP
 USER 목록은 `{ items, totalCount }`이며 item은 명세의 `categoryId`, `memo`를 포함합니다. ADMIN 목록도 `{ items, totalCount }`이고 요청자 필드는 `submitterId`, `submitterName`입니다. `page`는 1부터 시작하며 `totalCount`는 필터 적용 후 전체 건수입니다.
 HIS 응답은 별도 배열이며 item은 `{ id, receiptId, actorId, action, fromStatus, toStatus, reason, snapshot, createdAt }`입니다. UI는 `createdAt`으로 시간을 표시하며 action의 snapshot에서 승인 의견·정산 메모를 읽습니다.
 영수증 이미지는 상세의 `imageUrl`로 제공합니다. 기본 Mock 이미지는 SVG data URL, 업로드 이미지는 IndexedDB 파일에서 만든 data URL이며 저장된 HTTP(S) URL은 그대로 반환합니다.
-DSH 응답은 `{ month, totalAmount, approvedAmount, pendingCount, rejectedCount, settledCount, categoryStats }`이며 category item은 `{ categoryId, categoryName, amount, count }`입니다. 최신 summary 계약에는 `avgReviewMinutes`가 없으므로 UI는 admin 목록과 HIS 응답에서 평균 검토 시간을 계산합니다. 승인 금액은 summary의 `approvedAmount`를 사용합니다.
+DSH Real 응답은 `{ month, totalAmount, pendingCount, rejectedCount, averageReviewMinutes, categorySummaries }`입니다. `averageReviewMinutes`는 백엔드가 계산한 분 단위 값이며 프론트는 재계산하지 않고 유한한 0 이상 수치만 최대 소수점 첫째 자리까지 표시합니다. Mock 응답은 `averageReviewMinutes`와 `categoryStats`를 제공합니다. Mock category item은 `{ categoryId, categoryName, amount, count }`입니다. Real 응답에 없는 승인 금액이나 정산 완료 건수는 집계 정보 없음으로 표시합니다.
 `totalAmount`는 선택 월 제출 금액 합계, `pendingCount`는 SUBMITTED/OCR_PENDING/OCR_DONE/REVIEWING 건수입니다. 상태는 명세에 있는 7개 값만 사용합니다.
 
 Mock 이미지 참조, OCR confidence 원본, 제출 시각, 거절 사유, 정산 정보, HIS 이력은 저장소 내부에 유지하며 명세에 없는 필드는 API 응답에 노출하지 않습니다.

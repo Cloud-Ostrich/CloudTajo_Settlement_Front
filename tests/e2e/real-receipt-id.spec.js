@@ -2,6 +2,75 @@ import { test, expect } from '@playwright/test';
 
 const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 
+for (const outcome of ['saved', 'null', 'partial', 'failed']) {
+  realModeTest(`Real OCR 직접 승인: ${outcome}`, async ({ page }) => {
+    let approved = false;
+    const mutations = [];
+    const readsAfterApproval = [];
+    const raw = { merchantNameRaw: 'OCR 가게', paidAtRaw: '2026-10-07', amountRaw: 5000, status: 'OCR_DONE' };
+    await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const method = route.request().method();
+      if (method !== 'GET') mutations.push({ path, method, body: route.request().postDataJSON() });
+      else if (approved) readsAfterApproval.push(path);
+      const final = approved && outcome === 'saved'
+        ? { merchantName: raw.merchantNameRaw, paidAt: raw.paidAtRaw, amount: raw.amountRaw }
+        : { merchantName: approved && outcome === 'partial' ? raw.merchantNameRaw : null, paidAt: null, amount: null };
+      const receipt = { id: 801, categoryId: 1, categoryName: '식비', purpose: '직접 승인 확인', submitterName: '사용자', submitter: { name: '사용자' }, status: approved ? 'APPROVED' : 'OCR_DONE', ...final, ocrResult: raw };
+      let data;
+      if (path === '/api/auth/login' || path === '/api/users/me') {
+        const user = { id: 3, name: '관리자', role: 'ADMIN', email: 'admin@test.com' };
+        data = path.endsWith('/login') ? { accessToken: 'test-token', user } : user;
+      } else if (path === '/api/admin/dashboard/summary') {
+        data = { month: '2026-10', totalAmount: 5000, pendingCount: 1, rejectedCount: 0, averageReviewMinutes: 0, categorySummaries: [] };
+      } else if (path === '/api/admin/receipts') {
+        data = { items: [receipt], totalCount: 1 };
+      } else if (path === '/api/receipts/801') {
+        data = receipt;
+      } else if (path === '/api/receipts/801/histories') {
+        data = approved ? [{ id: 1, action: 'APPROVED', createdAt: '2026-10-07T01:00:00Z' }] : [];
+      } else if (path === '/api/admin/receipts/801/approve' && method === 'POST') {
+        if (outcome === 'failed') return route.fulfill({ status: 400, json: { success: false, errorCode: 'VALIDATION_ERROR', message: 'Approval failed' } });
+        approved = true;
+        data = { receiptId: 801, status: 'APPROVED' };
+      } else {
+        return route.fulfill({ status: 404, json: { success: false } });
+      }
+      await route.fulfill({ json: { success: true, data } });
+    });
+    await page.goto('/');
+    await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
+    await page.getByLabel('비밀번호', { exact: true }).fill('password');
+    await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/dashboard$/);
+    await page.getByRole('link', { name: '승인 관리 →', exact: true }).click();
+    await page.locator('.filter-tabs').getByRole('button', { name: '검토 필요', exact: true }).click();
+    const detail = page.locator('.approval-detail');
+    await expect(detail.getByText('OCR 가게', { exact: true })).toBeVisible();
+    await detail.getByLabel('검토 의견 (선택)').fill('원본 확인 완료');
+    await detail.getByRole('button', { name: '승인', exact: true }).click();
+    if (outcome === 'failed') {
+      await expect(detail.getByRole('alert')).toBeVisible();
+      await expect(detail.locator('.status-badge')).toHaveText('OCR 완료');
+    } else {
+      await expect(detail.locator('.status-badge')).toHaveText('승인');
+      await expect(detail.getByText('요청을 승인했습니다.', { exact: true })).toBeVisible();
+      await expect.poll(() => readsAfterApproval).toContain('/api/receipts/801');
+      await expect.poll(() => readsAfterApproval).toContain('/api/admin/receipts');
+      await expect.poll(() => readsAfterApproval).toContain('/api/receipts/801/histories');
+      await expect(page.locator('.request-table tbody tr')).toHaveCount(0);
+      const missingNotice = detail.getByText(/승인된 영수증의 최종 정보 일부가 비어 있습니다/);
+      if (outcome === 'saved') await expect(missingNotice).toHaveCount(0);
+      else await expect(missingNotice).toBeVisible();
+      await page.locator('.filter-tabs').getByRole('button', { name: '승인', exact: true }).click();
+      await expect(page.locator('.request-table tbody .status-badge')).toHaveText('승인');
+    }
+    expect(mutations.filter((request) => request.path !== '/api/auth/login')).toEqual([
+      { path: '/api/admin/receipts/801/approve', method: 'POST', body: { comment: '원본 확인 완료' } },
+    ]);
+  });
+}
+
 realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID로 호출', async ({ page }) => {
   const requestedPaths = [];
   const keyWarnings = [];
@@ -65,6 +134,7 @@ realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID�
 realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async ({ page }) => {
   const requestedMonths = [];
   const pageErrors = [];
+  const ocrUpdateRequests = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.route('http://127.0.0.1:5181/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -77,20 +147,28 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
       const requestedMonth = url.searchParams.get('month');
       requestedMonths.push(requestedMonth);
       const totalAmount = requestedMonth === '2025-12' ? 12500 : requestedMonth === '2026-02' ? 26000 : 18000;
-      data = { month: requestedMonth, totalAmount, categorySummaries: [{ categoryId: 1, categoryName: `${requestedMonth} 식비`, amount: totalAmount, count: 1 }], pendingCount: 2, rejectedCount: 1, averageReviewMinutes: 17 };
+      data = { month: requestedMonth, totalAmount, categorySummaries: [{ categoryId: 1, categoryName: `${requestedMonth} 식비`, amount: totalAmount, count: 1 }], pendingCount: 2, rejectedCount: 1, averageReviewMinutes: -500.3333333333333 };
     } else if (url.pathname === '/api/admin/receipts') {
       data = { items: [
         { id: 702, submitterId: 1, submitterName: '테스트 사용자', categoryId: 1, categoryName: '식비', purpose: '관리자 확인용', status: 'OCR_DONE', merchantName: null, paidAt: null, amount: null },
         { id: 703, submitterId: 1, submitterName: '테스트 사용자', categoryId: 1, categoryName: '식비', purpose: '인식 정보 없는 영수증', status: 'OCR_DONE', merchantName: null, paidAt: null, amount: null },
-      ], totalCount: 2 };
+        { id: 704, submitterId: 1, submitterName: '테스트 사용자', categoryId: 1, categoryName: '식비', purpose: '최종값 우선 확인', status: 'REVIEWING', merchantName: '확정 상호', paidAt: '2026-01-02', amount: 5000 },
+      ], totalCount: 3 };
     } else if (url.pathname === '/api/receipts/702') {
-      data = { id: 702, submitterId: 1, submitter: { id: 1, name: '테스트 사용자' }, categoryId: 1, categoryName: '식비', purpose: '관리자 확인용', status: 'OCR_DONE', merchantName: null, paidAt: null, amount: null, memo: '', file: null, ocrResult: { status: 'OCR_DONE', merchantNameRaw: '원본 상호', paidAtRaw: '2017-07-05', amountRaw: 100000 } };
+      data = { id: 702, submitterId: 1, submitter: { id: 1, name: '테스트 사용자' }, categoryId: 1, categoryName: '식비', purpose: '관리자 확인용', status: 'REVIEWING', merchantName: null, paidAt: null, amount: null, memo: '', file: null, ocrResult: { status: 'OCR_DONE', merchantNameRaw: '원본 상호', paidAtRaw: '2017-07-05', amountRaw: 100000, confidence: null } };
     } else if (url.pathname === '/api/receipts/703') {
       data = { id: 703, submitterId: 1, submitter: { id: 1, name: '테스트 사용자' }, categoryId: 1, categoryName: '식비', purpose: '인식 정보 없는 영수증', status: 'OCR_DONE', merchantName: null, paidAt: null, amount: null, memo: '', file: null, ocrResult: { status: 'OCR_DONE', merchantNameRaw: null, paidAtRaw: null, amountRaw: null } };
     } else if (url.pathname === '/api/receipts/702/histories') {
       data = [];
     } else if (url.pathname === '/api/receipts/703/histories') {
       data = [];
+    } else if (url.pathname === '/api/receipts/704') {
+      data = { id: 704, submitterId: 1, submitter: { id: 1, name: '테스트 사용자' }, categoryId: 1, categoryName: '식비', purpose: '최종값 우선 확인', status: 'REVIEWING', merchantName: '확정 상호', paidAt: '2026-01-02', amount: 5000, memo: '', file: null, ocrResult: { status: 'OCR_DONE', merchantNameRaw: '다른 원본 상호', paidAtRaw: '2017-07-05', amountRaw: 100000, confidence: 0.9 } };
+    } else if (url.pathname === '/api/receipts/704/histories') {
+      data = [];
+    } else if (url.pathname === '/api/admin/receipts/704/ocr' && route.request().method() === 'PATCH') {
+      ocrUpdateRequests.push(url.pathname);
+      data = { receiptId: 704, status: 'REVIEWING' };
     } else {
       return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ success: false, message: 'Not found' }) });
     }
@@ -106,7 +184,7 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await expect(page.getByRole('heading', { name: '카테고리별 제출 현황' })).toBeVisible();
   await expect(page.locator('.summary-card').filter({ hasText: '승인 금액' })).toContainText('집계 정보 없음');
   await expect(page.locator('.summary-card').filter({ hasText: '정산 완료' })).toContainText('집계 정보 없음');
-  await expect(page.locator('.summary-card').filter({ hasText: '평균 검토 시간' })).toContainText('17분');
+  await expect(page.locator('.summary-card').filter({ hasText: '평균 검토 시간' })).toContainText('집계 정보 없음');
   const yearSelect = page.getByLabel('조회 연도');
   const monthSelect = page.getByLabel('조회 월');
   const totalAmountCard = page.locator('.summary-card').filter({ hasText: '총 제출 금액' });
@@ -150,15 +228,25 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await page.goto('/admin/approvals');
   const approvalDetail = page.locator('.approval-detail');
   await expect(approvalDetail.getByText('OCR 인식 완료', { exact: true })).toBeVisible();
-  await expect(approvalDetail.getByRole('heading', { name: 'OCR 인식 결과(관리자 검토 전)' })).toBeVisible();
+  await expect(approvalDetail.getByRole('heading', { name: 'OCR 결과' })).toBeVisible();
+  await expect(approvalDetail.getByRole('heading', { name: 'OCR 인식 결과(관리자 검토 전)' })).toHaveCount(0);
   await expect(approvalDetail.getByText('원본 상호', { exact: true })).toBeVisible();
+  await expect(approvalDetail.getByText('신뢰도 정보 없음', { exact: true })).toBeVisible();
   await approvalDetail.getByRole('button', { name: 'OCR 수정', exact: true }).click();
-  await expect(approvalDetail.getByLabel('사용처', { exact: true })).toHaveValue('');
-  await expect(approvalDetail.getByLabel('결제일', { exact: true })).toHaveValue('');
-  await expect(approvalDetail.getByLabel('총 금액 (원)', { exact: true })).toHaveValue('');
+  await expect(approvalDetail.getByLabel('사용처', { exact: true })).toHaveValue('원본 상호');
+  await expect(approvalDetail.getByLabel('결제일', { exact: true })).toHaveValue('2017-07-05');
+  await expect(approvalDetail.getByLabel('총 금액 (원)', { exact: true })).toHaveValue('100000');
   await approvalDetail.getByRole('button', { name: '취소', exact: true }).click();
   await page.getByRole('button', { name: /인식 정보 없는 영수증/ }).click();
   await expect(approvalDetail.getByText('OCR 인식 완료', { exact: true })).toBeVisible();
-  await expect(approvalDetail.getByText('인식된 정보 없음', { exact: true })).toBeVisible();
+  await expect(approvalDetail.getByText('인식 정보 없음', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /최종값 우선 확인/ }).click();
+  await expect(approvalDetail.getByRole('region', { name: '최종 확정 정보' }).getByText('확정 상호', { exact: true })).toBeVisible();
+  await expect(approvalDetail.getByRole('region', { name: '최종 확정 정보' }).getByText('다른 원본 상호', { exact: true })).toHaveCount(0);
+  await approvalDetail.getByRole('button', { name: 'OCR 수정', exact: true }).click();
+  await expect(approvalDetail.getByLabel('사용처', { exact: true })).toHaveValue('확정 상호');
+  await expect(approvalDetail.getByLabel('결제일', { exact: true })).toHaveValue('2026-01-02');
+  await expect(approvalDetail.getByLabel('총 금액 (원)', { exact: true })).toHaveValue('5000');
+  expect(ocrUpdateRequests).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

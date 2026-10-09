@@ -33,7 +33,7 @@ const sessionStore = await import('../src/api/session.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
 const originalConsoleError = console.error;
 let apiErrorLogs;
-const { categoryNameFor, historyActionLabel, receiptIdOf, shiftMonth, STATUS_LABELS } = await import('../src/api/contracts.js');
+const { categoryNameFor, formatReviewMinutes, historyActionLabel, receiptIdOf, shiftMonth, STATUS_LABELS } = await import('../src/api/contracts.js');
 const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequests.js');
 beforeEach(() => {
   apiErrorLogs = [];
@@ -98,6 +98,15 @@ test('월 이동은 연도 경계를 포함해 YYYY-MM을 유지', () => {
   assert.equal(shiftMonth('2026-01', -1), '2025-12');
   assert.equal(shiftMonth('2025-12', 1), '2026-01');
   assert.equal(shiftMonth('2026-10', -1), '2026-09');
+});
+
+test('평균 검토 시간은 유한한 0 이상 값만 최대 소수점 한 자리로 표시', () => {
+  assert.equal(formatReviewMinutes(12.345), '12.3분');
+  assert.equal(formatReviewMinutes(30), '30분');
+  assert.equal(formatReviewMinutes(0), '0분');
+  for (const invalid of [-500.3333333333333, -1, null, undefined, NaN, Infinity, -Infinity, '12.3']) {
+    assert.equal(formatReviewMinutes(invalid), '집계 정보 없음');
+  }
 });
 
 test('저장된 세션 복원은 현재 사용자로 갱신하고 동시 요청을 공유', async () => {
@@ -208,7 +217,8 @@ test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER
   assert.equal(settled.data.settlement.settledBy, 3); assert.equal(settled.data.settlement.comment, '회비 정산 완료');
   await assert.rejects(api.updateOcr(sampleMinseo, { merchantName: '수정', paidAt: '2026-10-05', amount: 1, reason: '보정' }), code('INVALID_STATUS_TRANSITION'));
   const summary = await api.getAdminSummary('2026-10'); envelope(summary);
-  assert.deepEqual(Object.keys(summary.data).sort(), ['month', 'totalAmount', 'approvedAmount', 'pendingCount', 'rejectedCount', 'settledCount', 'categoryStats'].sort());
+  assert.deepEqual(Object.keys(summary.data).sort(), ['month', 'totalAmount', 'approvedAmount', 'pendingCount', 'rejectedCount', 'settledCount', 'averageReviewMinutes', 'categoryStats'].sort());
+  assert.equal(typeof summary.data.averageReviewMinutes, 'number');
   assert.ok(summary.data.categoryStats.every((category) => 'amount' in category && 'count' in category && !('totalAmount' in category)));
   sessionStore.logout(); await api.login('user1@test.com', '1234');
   assert.equal((await api.getMyReceipts()).data.items.find((r) => r.receiptId === sampleMinseo).status, 'SETTLED');

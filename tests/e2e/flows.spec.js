@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+test.skip(process.env.VITE_API_MODE === 'real', 'Mock 시나리오는 Real 모드에서 실행하지 않습니다.');
 // 각 test는 Playwright의 독립 BrowserContext를 사용합니다.
 // 실제 앱의 Mock API와 localStorage/IndexedDB를 쓰며 서버 응답을 intercept하지 않습니다.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64');
@@ -84,7 +85,7 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   await detail.getByLabel('총 금액 (원)', { exact: true }).fill('18900');
   await detail.getByLabel('수정 사유 (필수)').fill('원본 금액 확인');
   await detail.getByRole('button', { name: 'OCR 수정 저장' }).click();
-  await expect(detail.locator('.admin-review-info .detail-fields').last().getByText('E2E 보정 카페', { exact: true })).toBeVisible();
+  await expect(detail.getByRole('region', { name: '최종 확정 정보' }).getByText('E2E 보정 카페', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '승인', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('승인');
   await detail.getByLabel('정산일', { exact: true }).fill('2026-10-05');

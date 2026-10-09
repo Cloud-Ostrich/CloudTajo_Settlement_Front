@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest } from '../api/client';
 import { useApiData } from '../hooks/useMockData';
-import { money, receiptIdOf, shiftMonth, today } from '../api/contracts';
+import { formatReviewMinutes, money, shiftMonth, today } from '../api/contracts';
 import './Receipts.css';
 import './Workspace.css';
 import './Admin.css';
@@ -15,32 +14,11 @@ export default function AdminDashboard() {
   const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
   const monthLabel = `${year}년 ${Number(monthNumber)}월`;
   const { data: apiData, error, reload } = useApiData('/admin/dashboard/summary', { month });
-  const { data: receiptData } = useApiData('/admin/receipts');
-  const [avgReviewMinutes, setAvgReviewMinutes] = useState(0);
-  useEffect(() => {
-    if (!apiData?.month || !receiptData?.items) return;
-    let active = true;
-    const reviewed = receiptData.items.filter((receipt) => ['APPROVED', 'REJECTED', 'SETTLED'].includes(receipt.status) && receipt.paidAt?.startsWith(apiData.month));
-    Promise.all(reviewed.map(async (receipt) => {
-      const response = await apiRequest({ method: 'GET', url: `/receipts/${receiptIdOf(receipt)}/histories` });
-      const submittedAt = response.data.find((item) => item.action === 'SUBMITTED')?.createdAt;
-      const decisionAt = response.data.find((item) => ['APPROVED', 'REJECTED'].includes(item.action))?.createdAt;
-      return submittedAt && decisionAt ? Math.max(0, (Date.parse(decisionAt) - Date.parse(submittedAt)) / 60000) : null;
-    })).then((durations) => {
-      if (!active) return;
-      const validDurations = durations.filter((duration) => duration != null);
-      setAvgReviewMinutes(validDurations.length ? Math.round(validDurations.reduce((sum, duration) => sum + duration, 0) / validDurations.length) : 0);
-    }).catch(() => {
-      if (active) setAvgReviewMinutes(0);
-    });
-    return () => { active = false; };
-  }, [apiData?.month, receiptData]);
   const categorySummaries = Array.isArray(apiData?.categorySummaries)
     ? apiData.categorySummaries
     : Array.isArray(apiData?.categoryStats) ? apiData.categoryStats : [];
   const data = apiData && {
     ...apiData,
-    avgReviewMinutes: apiData.averageReviewMinutes ?? avgReviewMinutes,
     categoryStats: categorySummaries.map((category) => ({ ...category, totalAmount: category.amount })),
   };
   return (
@@ -65,7 +43,7 @@ export default function AdminDashboard() {
       {error && <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p>}
       {!data && !error && <p role="status">운영 현황 불러오는 중…</p>}
       {data && <>
-        <div className="summary-grid">{[['총 제출 금액', money(data.totalAmount)], ['승인 금액', data.approvedAmount == null ? '집계 정보 없음' : money(data.approvedAmount)], ['처리 대기', `${data.pendingCount}건`], ['반려', `${data.rejectedCount}건`], ['정산 완료', data.settledCount == null ? '집계 정보 없음' : `${data.settledCount}건`], ['평균 검토 시간', `${data.avgReviewMinutes}분`]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div>
+        <div className="summary-grid">{[['총 제출 금액', money(data.totalAmount)], ['승인 금액', data.approvedAmount == null ? '집계 정보 없음' : money(data.approvedAmount)], ['처리 대기', `${data.pendingCount}건`], ['반려', `${data.rejectedCount}건`], ['정산 완료', data.settledCount == null ? '집계 정보 없음' : `${data.settledCount}건`], ['평균 검토 시간', formatReviewMinutes(data.averageReviewMinutes)]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div>
         <section className="receipt-card"><h2>카테고리별 제출 현황</h2><div className="table-scroll"><table className="request-table"><thead><tr><th>카테고리</th><th>건수</th><th>금액</th></tr></thead><tbody>{data.categoryStats.map((category) => <tr key={category.categoryId}><td>{category.categoryName}</td><td>{category.count}건</td><td>{money(category.totalAmount)}</td></tr>)}</tbody></table></div></section>
       </>}
     </section>

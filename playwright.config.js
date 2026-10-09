@@ -10,6 +10,7 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:5181', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
+    env: { VITE_API_MODE: process.env.VITE_API_MODE || 'mock' },
     command: 'npm run dev -- --host 127.0.0.1 --port 5181 --strictPort',
     url: 'http://127.0.0.1:5181', reuseExistingServer: false, timeout: 30000,
   },

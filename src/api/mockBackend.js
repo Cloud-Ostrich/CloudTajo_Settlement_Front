@@ -118,7 +118,16 @@ async function dispatch(config) {
   if (path === '/admin/dashboard/summary' && method === 'GET') {
     const month = config.params?.month || today().slice(0, 7);
     const items = readReceipts().filter((r) => (r.paidAt || r.createdAt).startsWith(month));
-    return ok({ month, totalAmount: items.reduce((sum, r) => sum + (r.amount || 0), 0), approvedAmount: items.filter((r) => ['APPROVED', 'SETTLED'].includes(r.status)).reduce((sum, r) => sum + (r.amount || 0), 0), pendingCount: items.filter((r) => ['SUBMITTED', 'OCR_PENDING', 'OCR_DONE', 'REVIEWING'].includes(r.status)).length, rejectedCount: items.filter((r) => r.status === 'REJECTED').length, settledCount: items.filter((r) => r.status === 'SETTLED').length, categoryStats: CATEGORIES.map((c) => ({ categoryId: c.id, categoryName: c.name, amount: items.filter((r) => r.categoryId === c.id).reduce((sum, r) => sum + (r.amount || 0), 0), count: items.filter((r) => r.categoryId === c.id).length })) });
+    const reviewed = items.filter((receipt) => ['APPROVED', 'REJECTED', 'SETTLED'].includes(receipt.status));
+    const reviewDurations = reviewed.map((receipt) => {
+      const submittedAt = receipt.history.find((item) => item.action === 'SUBMITTED')?.createdAt;
+      const decisionAt = receipt.history.find((item) => ['APPROVED', 'REJECTED'].includes(item.action))?.createdAt;
+      if (!submittedAt || !decisionAt) return null;
+      const duration = (Date.parse(decisionAt) - Date.parse(submittedAt)) / 60000;
+      return Number.isFinite(duration) ? duration : null;
+    }).filter((duration) => duration != null);
+    const averageReviewMinutes = reviewDurations.length ? reviewDurations.reduce((sum, duration) => sum + duration, 0) / reviewDurations.length : 0;
+    return ok({ month, totalAmount: items.reduce((sum, r) => sum + (r.amount || 0), 0), approvedAmount: items.filter((r) => ['APPROVED', 'SETTLED'].includes(r.status)).reduce((sum, r) => sum + (r.amount || 0), 0), pendingCount: items.filter((r) => ['SUBMITTED', 'OCR_PENDING', 'OCR_DONE', 'REVIEWING'].includes(r.status)).length, rejectedCount: items.filter((r) => r.status === 'REJECTED').length, settledCount: items.filter((r) => r.status === 'SETTLED').length, averageReviewMinutes, categoryStats: CATEGORIES.map((c) => ({ categoryId: c.id, categoryName: c.name, amount: items.filter((r) => r.categoryId === c.id).reduce((sum, r) => sum + (r.amount || 0), 0), count: items.filter((r) => r.categoryId === c.id).length })) });
   }
   const match = path.match(/^\/(?:admin\/)?receipts\/(\d+)(?:\/(ocr|approve|reject|settle))?$/);
   if (!match) fail('지원하지 않는 API입니다.', 'NOT_FOUND');
