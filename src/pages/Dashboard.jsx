@@ -4,6 +4,7 @@ import { categoryNameFor, historyActionLabel, STATUS_LABELS, money, receiptIdOf,
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
+import OcrResultDetails from '../components/OcrResultDetails';
 import './Receipts.css';
 import './Workspace.css';
 import './Dashboard.css';
@@ -24,7 +25,7 @@ function ReceiptDetail({ id, onClose }) {
     return () => dialog.close();
   }, []);
   const processing = receipt && ['SUBMITTED', 'OCR_PENDING'].includes(receipt.status);
-  const hasOcr = receipt && !processing && [receipt.merchantName, receipt.paidAt, receipt.amount, receipt.ocrResult?.confidence].some((value) => value != null);
+  const hasFinalOcr = receipt && [receipt.merchantName, receipt.paidAt, receipt.amount].some((value) => value != null);
   function handleDialogClick(event) {
     if (event.target !== event.currentTarget) return;
     const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
@@ -43,7 +44,8 @@ function ReceiptDetail({ id, onClose }) {
           <div><dt>카테고리</dt><dd>{categoryName}</dd></div>
           {receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}
         </dl>
-        {processing ? <p className="receipt-tip" role="status">{receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.'}</p> : hasOcr ? <><h3 className="section-title">OCR 결과</h3><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName ?? '인식 결과 없음'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt ?? '인식 결과 없음'}</dd></div><div><dt>총 금액</dt><dd>{receipt.amount == null ? '인식 결과 없음' : money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.ocrResult?.confidence == null ? '인식 결과 없음' : `${Math.round(receipt.ocrResult.confidence * 100)}%`}</dd></div></dl></> : <p className="receipt-tip">OCR 결과가 없습니다.</p>}
+        {!processing && hasFinalOcr && <section aria-label="최종 확정 정보"><h3 className="section-title">최종 확정 정보</h3><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName ?? '인식 결과 없음'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt ?? '인식 결과 없음'}</dd></div><div><dt>총 금액</dt><dd>{receipt.amount == null ? '인식 결과 없음' : money(receipt.amount)}</dd></div></dl></section>}
+        <OcrResultDetails ocrResult={receipt.ocrResult} workflowStatus={receipt.status} waitingMessage={processing ? (receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.') : 'OCR 결과가 없습니다.'} />
         {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p>{rejection?.reason || '등록된 반려 사유가 없습니다.'}</p></div>}
         {settlement?.snapshot?.settledAt && <p className="muted">정산일 · {settlement.snapshot.settledAt}</p>}
         </div>

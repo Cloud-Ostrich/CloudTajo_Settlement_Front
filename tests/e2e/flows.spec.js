@@ -84,7 +84,7 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   await detail.getByLabel('총 금액 (원)', { exact: true }).fill('18900');
   await detail.getByLabel('수정 사유 (필수)').fill('원본 금액 확인');
   await detail.getByRole('button', { name: 'OCR 수정 저장' }).click();
-  await expect(detail.getByText('E2E 보정 카페', { exact: true })).toBeVisible();
+  await expect(detail.locator('.admin-review-info .detail-fields').last().getByText('E2E 보정 카페', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '승인', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('승인');
   await detail.getByLabel('정산일', { exact: true }).fill('2026-10-05');
@@ -97,7 +97,8 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   await expect(userRow.getByText('정산 완료', { exact: true })).toBeVisible();
   await userRow.click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('18,900원', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '최종 확정 정보' }).getByText('18,900원', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: 'OCR 인식 정보' }).getByText('18,900원', { exact: true })).toBeVisible();
   await expect(dialog.getByText('97%', { exact: true })).toBeVisible();
   await expect(dialog.locator('input,textarea')).toHaveCount(0);
 });
@@ -178,7 +179,9 @@ test('USER 상세 Modal: 표시 전용 영수증, 실제 타임라인, 반려 �
   await page.locator('.submission-card').filter({ hasText: '카페 그린브릿지' }).click();
   const dialog = page.getByRole('dialog', { name: '영수증 상세' });
   await expect(dialog.getByRole('heading', { name: '제출 정보' })).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'OCR 결과' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: '최종 확정 정보' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'OCR 인식 결과(관리자 검토 전)' })).toBeVisible();
+  await expect(dialog.getByText('OCR 인식 완료', { exact: true })).toBeVisible();
   await expect(dialog.locator('.rejection-note')).toHaveCount(0);
   await expect(dialog.locator('.receipt-timeline li')).toHaveCount(1);
   const source = await dialog.locator('img').getAttribute('src');

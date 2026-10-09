@@ -4,6 +4,7 @@ import { categoryNameFor, historyActionLabel, receiptIdOf, REVIEWABLE, money, to
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
+import OcrResultDetails from '../components/OcrResultDetails';
 import './Receipts.css';
 import './Workspace.css';
 import './ReceiptDetail.css';
@@ -50,11 +51,19 @@ function ApprovalDetail({ id }) {
     rejectReason: [...timeline].reverse().find((item) => item.action === 'REJECTED')?.reason || '',
     settledAt: [...timeline].reverse().find((item) => item.action === 'SETTLED')?.snapshot?.settledAt || null,
   };
-  return <section className="receipt-card approval-detail" aria-label="영수증 검토 상세"><div className="card-heading"><h2>제출 상세 #{receipt.receiptId}</h2><StatusBadge status={receipt.status} /></div>
-    <div className="admin-review-columns"><div className="admin-original"><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div><div className="admin-review-info">
-    <h3 className="section-title">제출 정보</h3><dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div>{receipt.user?.name && <div><dt>제출자</dt><dd>{receipt.user.name}</dd></div>}<div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
-    <DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={reload} />{receipt.status === 'REJECTED' && receipt.rejectReason && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason}</p></div>}{receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
-    </div></div>
+  return <section className="receipt-card approval-detail" aria-label="영수증 검토 상세">
+    <div className="card-heading"><h2>제출 상세 #{receipt.receiptId}</h2><StatusBadge status={receipt.status} /></div>
+    <div className="admin-review-columns">
+      <div className="admin-original"><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div>
+      <div className="admin-review-info">
+        <h3 className="section-title">제출 정보</h3>
+        <dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div>{receipt.user?.name && <div><dt>제출자</dt><dd>{receipt.user.name}</dd></div>}<div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
+        <OcrResultDetails ocrResult={receipt.ocrResult} workflowStatus={receipt.status} />
+        <DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={reload} />
+        {receipt.status === 'REJECTED' && receipt.rejectReason && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason}</p></div>}
+        {receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
+      </div>
+    </div>
     {!!receipt.history?.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{receipt.history.map((item, index) => <li key={index}><div className="timeline-content"><strong>{item.label === 'Mock OCR 완료' ? 'OCR 처리 완료' : item.label}</strong>{(item.reason || item.comment) && <p>{item.reason || item.comment}</p>}</div><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol></>}
   </section>;
 
