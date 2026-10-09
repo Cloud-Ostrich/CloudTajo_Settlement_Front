@@ -2,6 +2,66 @@ import { test, expect } from '@playwright/test';
 
 const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 
+realModeTest('관리자 목록: 필요한 상세만 조회하고 최종값/OCR/실패/필터 캐시 처리', async ({ page }) => {
+  const reads = [];
+  const mutations = [];
+  const base = { categoryId: 1, categoryName: '식비', submitterName: '사용자', merchantName: null, paidAt: null, amount: null };
+  const items = [
+    { ...base, id: 901, purpose: '완전한 최종값', status: 'APPROVED', merchantName: '최종 가게', paidAt: '2026-10-01', amount: 1000 },
+    { ...base, id: 902, purpose: 'OCR 목록', status: 'OCR_DONE', ocrResult: { merchantNameRaw: '목록 OCR', paidAtRaw: '2026-10-02', amountRaw: 2000 } },
+    { ...base, id: 903, purpose: '상세 보완', status: 'REVIEWING', merchantName: '목록 확정 상호' },
+    { ...base, id: 904, purpose: '정산 보완', status: 'SETTLED' },
+    { ...base, id: 905, purpose: '조회 실패', status: 'APPROVED', amount: 5000 },
+    { ...base, id: 906, purpose: '처리 대기', status: 'OCR_PENDING' },
+    { ...base, id: 907, purpose: '승인 보완', status: 'APPROVED' },
+    { ...base, id: 908, purpose: '다른 최종값', status: 'SETTLED', merchantName: '확정 정산 가게', paidAt: '2026-10-08', amount: 8000 },
+  ];
+  await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== 'GET') mutations.push(path);
+    let data;
+    if (path === '/api/auth/login') data = { accessToken: 'test-token', user: { id: 3, role: 'ADMIN', name: '관리자' } };
+    else if (path === '/api/admin/dashboard/summary') data = { totalAmount: 0, pendingCount: 0, rejectedCount: 0, categorySummaries: [] };
+    else if (path === '/api/admin/receipts') data = { items, totalCount: items.length };
+    else if (path.endsWith('/histories')) data = [];
+    else if (/\/api\/receipts\/\d+$/.test(path)) {
+      const id = Number(path.split('/').at(-1));
+      reads.push(id);
+      if (id === 905) return route.fulfill({ status: 500, json: { success: false } });
+      data = { ...items.find((item) => item.id === id), ocrResult: { merchantNameRaw: `상세 OCR ${id}`, paidAtRaw: '2026-10-03', amountRaw: 3000 } };
+      if (id === 903) data.paidAt = '2026-10-04';
+    } else return route.fulfill({ status: 404, json: { success: false } });
+    await route.fulfill({ json: { success: true, data } });
+  });
+  await page.goto('/');
+  await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('password');
+  await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+  await page.getByRole('link', { name: '승인 관리 →', exact: true }).click();
+  const row = (purpose) => page.locator('.request-table tbody tr').filter({ hasText: purpose });
+  await expect(row('OCR 목록')).toContainText('목록 OCR');
+  await expect(row('상세 보완')).toContainText('목록 확정 상호');
+  await expect(row('상세 보완')).toContainText('2026.10.04');
+  await expect(row('상세 보완')).toContainText('3,000원');
+  await expect(row('정산 보완')).toContainText('상세 OCR 904');
+  await expect(row('승인 보완')).toContainText('상세 OCR 907');
+  await expect.poll(() => reads.includes(905)).toBe(true);
+  await expect(row('조회 실패')).toContainText('5,000원');
+  await expect(row('조회 실패')).toContainText('OCR 인식 대기');
+  await expect(row('처리 대기')).toContainText('OCR 인식 대기');
+  expect(reads).not.toContain(902);
+  expect(reads).not.toContain(906);
+  expect(reads).not.toContain(908);
+  const previewReads = () => reads.filter((id) => [903, 904, 905, 907].includes(id));
+  expect(previewReads().sort()).toEqual([903, 904, 905, 907]);
+  await page.locator('.filter-tabs').getByRole('button', { name: '반려', exact: true }).click();
+  await expect(page.locator('.request-table tbody tr')).toHaveCount(0);
+  await page.locator('.filter-tabs').getByRole('button', { name: '전체', exact: true }).click();
+  await expect(row('승인 보완')).toContainText('상세 OCR 907');
+  expect(previewReads().sort()).toEqual([903, 904, 905, 907]);
+  expect(mutations).toEqual(['/api/auth/login']);
+});
+
 for (const outcome of ['saved', 'null', 'partial', 'failed']) {
   realModeTest(`Real OCR 직접 승인: ${outcome}`, async ({ page }) => {
     let approved = false;
