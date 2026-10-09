@@ -247,3 +247,39 @@ test('전체 서비스 모바일 반응형과 관리자 필터/상세 표시', a
   await expect(page.locator('.approval-detail').getByRole('button', { name: '반려', exact: true })).toHaveCount(0);
   await expect(page.locator('.approval-detail').getByRole('button', { name: '정산 완료 처리', exact: true })).toHaveCount(0);
 });
+
+
+for (const entry of ['목록', '상세']) {
+  test(`반려 영수증 ${entry}에서 새 이미지로 재제출하고 원본 이력 보존`, async ({ page }) => {
+    await login(page, 'user1@test.com');
+    const original = page.locator('.submission-cards > li').filter({ hasText: '그린마트' });
+    await expect(original).toBeVisible();
+    const initialCount = await page.locator('.submission-card').count();
+    await expect(page.getByRole('link', { name: '다시 제출', exact: true })).toHaveCount(1);
+    await original.locator('.submission-card').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('link', { name: '다시 제출', exact: true })).toBeVisible();
+    const purpose = await dialog.locator('.detail-fields > div').filter({ hasText: '사용 목적' }).locator('dd').innerText();
+    const reason = await dialog.locator('.rejection-note p').innerText();
+    const history = await dialog.locator('.receipt-timeline').textContent();
+    if (entry === '상세') await dialog.getByRole('link', { name: '다시 제출', exact: true }).click();
+    else {
+      await dialog.getByRole('button', { name: '영수증 상세 닫기' }).click();
+      await original.getByRole('link', { name: '다시 제출', exact: true }).click();
+    }
+    await expect(page).toHaveURL(/\/receipts\/new$/);
+    await expect(page.getByLabel('사용 목적 (필수)')).toHaveValue(purpose);
+    await expect(page.getByLabel('카테고리 (필수)')).not.toHaveValue('');
+    await expect(page.getByAltText('선택한 영수증 미리보기')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '영수증 제출', exact: true })).toBeDisabled();
+    await page.locator('#receipt-file').setInputFiles({ name: 'resubmission.png', mimeType: 'image/png', buffer: png });
+    await page.getByRole('button', { name: '영수증 제출', exact: true }).click();
+    await expect(page.getByText('새 영수증이 생성되었습니다. 기존 반려 영수증과 반려 사유는 그대로 유지됩니다.')).toBeVisible();
+    await page.getByRole('link', { name: '내 제출 현황 확인' }).click();
+    await expect(page.locator('.submission-card')).toHaveCount(initialCount + 1);
+    await expect(original.locator('.status-badge')).toHaveText('반려');
+    await original.locator('.submission-card').click();
+    await expect(page.getByRole('dialog').locator('.rejection-note p')).toHaveText(reason);
+    await expect(page.getByRole('dialog').locator('.receipt-timeline')).toHaveText(history);
+  });
+}

@@ -2,6 +2,72 @@ import { test, expect } from '@playwright/test';
 
 const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 
+realModeTest('Real 반려 재제출: 상태별 버튼, 상세 정보 재사용, 신규 POST만 호출', async ({ page }) => {
+  const mutations = [];
+  let attempts = 0;
+  const statuses = ['SUBMITTED', 'OCR_PENDING', 'OCR_DONE', 'REVIEWING', 'APPROVED', 'REJECTED', 'SETTLED'];
+  await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const method = route.request().method();
+    if (method !== 'GET' && path !== '/api/auth/login') mutations.push({ path, method, body: route.request().postData() });
+    let data;
+    if (path === '/api/auth/login') data = { accessToken: 'test-token', user: { id: 1, role: 'USER', name: '사용자' } };
+    else if (path === '/api/categories') data = [{ id: 1, name: '식비' }];
+    else if (path === '/api/receipts/my') data = { items: statuses.map((status, index) => ({ id: 100 + index, status, purpose: `${status} 요청` })) };
+    else if (/\/api\/receipts\/\d+$/.test(path)) {
+      const id = Number(path.split('/').at(-1));
+      data = { id, status: statuses[id - 100], purpose: '상세 사용 목적', categoryId: 1, memo: '상세 메모' };
+    } else if (path.endsWith('/histories')) data = [{ id: 1, action: 'REJECTED', reason: '이미지 보완', createdAt: '2026-10-09T01:00:00Z' }];
+    else if (path === '/api/receipts' && method === 'POST') {
+      attempts++;
+      if (attempts === 1) return route.fulfill({ status: 500, json: { success: false } });
+      data = { receiptId: 201, status: 'OCR_PENDING' };
+    } else return route.fulfill({ status: 404, json: { success: false } });
+    await route.fulfill({ json: { success: true, message: 'OK', data } });
+  });
+  await page.goto('/');
+  await page.getByLabel('이메일', { exact: true }).fill('user@test.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('password');
+  await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+  await expect(page.getByRole('link', { name: '다시 제출', exact: true })).toHaveCount(1);
+  for (const status of statuses) {
+    await page.locator('.submission-card').filter({ hasText: `${status} 요청` }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('.status-badge')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: '다시 제출', exact: true })).toHaveCount(status === 'REJECTED' ? 1 : 0);
+    await dialog.getByRole('button', { name: '영수증 상세 닫기' }).click();
+  }
+  // List fields that are unavailable remain empty; cancel leaves the original intact.
+  await page.getByRole('link', { name: '다시 제출', exact: true }).click();
+  await expect(page.getByLabel('사용 목적 (필수)')).toHaveValue('REJECTED 요청');
+  await expect(page.getByLabel('카테고리 (필수)')).toHaveValue('');
+  await page.getByRole('link', { name: '취소', exact: true }).click();
+  await page.locator('.submission-card').filter({ hasText: 'REJECTED 요청' }).click();
+  await page.getByRole('dialog').getByRole('link', { name: '다시 제출', exact: true }).click();
+  await expect(page.getByLabel('사용 목적 (필수)')).toHaveValue('상세 사용 목적');
+  await expect(page.getByLabel('카테고리 (필수)')).toHaveValue('1');
+  await expect(page.getByLabel('메모 (선택)')).toHaveValue('상세 메모');
+  await expect(page.locator('#receipt-file')).toHaveValue('');
+  const submit = page.getByRole('button', { name: '영수증 제출', exact: true });
+  await expect(submit).toBeDisabled();
+  await page.locator('#receipt-file').setInputFiles({ name: 'new-image.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64') });
+  await submit.click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('메모 (선택)')).toHaveValue('상세 메모');
+  await submit.click();
+  await expect(page.getByText(/새 영수증이 생성되었습니다/)).toBeVisible();
+  await expect(page.getByText(/제출 번호 #201/)).toBeVisible();
+  expect(mutations).toHaveLength(2);
+  for (const request of mutations) {
+    expect(request.path).toBe('/api/receipts');
+    expect(request.method).toBe('POST');
+    expect(request.body).toContain('filename="new-image.png"');
+    expect(request.body).toContain('상세 사용 목적');
+    expect(request.body).not.toContain('sourceId');
+    expect(request.body).not.toContain('receiptId');
+  }
+});
+
 for (const kind of ['zero', 'null', 'missing']) {
   realModeTest(`운영 집계의 0/null/누락 표시: ${kind}`, async ({ page }) => {
     const requestedPaths = [];

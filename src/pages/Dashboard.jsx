@@ -4,6 +4,7 @@ import { categoryNameFor, historyActionLabel, STATUS_LABELS, money, receiptIdOf,
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
+import ResubmitReceiptLink from '../components/ResubmitReceiptLink';
 import FinalOcrDetails from '../components/FinalOcrDetails';
 import OcrResultDetails from '../components/OcrResultDetails';
 import './Receipts.css';
@@ -48,6 +49,7 @@ function ReceiptDetail({ id, onClose }) {
         {!processing && hasFinalOcr && <FinalOcrDetails receipt={receipt} />}
         <OcrResultDetails ocrResult={receipt.ocrResult} workflowStatus={receipt.status} waitingMessage={processing ? (receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.') : 'OCR 결과가 없습니다.'} />
         {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p>{rejection?.reason || '등록된 반려 사유가 없습니다.'}</p></div>}
+        <ResubmitReceiptLink receipt={receipt} />
         {settlement?.snapshot?.settledAt && <p className="muted">정산일 · {settlement.snapshot.settledAt}</p>}
         </div>
       </div>
@@ -70,7 +72,7 @@ function Dashboard() {
       {!data && !error ? <p className="list-empty" role="status">제출 내역 불러오는 중…</p> : <ul className="submission-cards" aria-label="제출 내역">{visible.map((r) => <li key={r.receiptId}><button className="submission-card" onClick={() => setSelectedId(r.receiptId)} aria-haspopup="dialog" aria-expanded={selectedId === r.receiptId}>
         <span className="submission-main"><strong>{r.merchantName || '영수증 처리 중'}</strong><span className="submission-purpose">{r.purpose}<span className="submission-category"> · {r.categoryName}</span></span><span className="submission-date">{r.paidAt ? r.paidAt.replaceAll('-', '.') : '결제일 확인 중'}</span></span>
         <span className="submission-side"><span className={`status-badge status-${r.status}`}>{r.status === 'REVIEWING' ? '관리자 검토 중' : STATUS_LABELS[r.status]}</span><strong className="submission-amount">{money(r.amount)}</strong></span><span className="submission-chevron" aria-hidden="true">›</span>
-      </button></li>)}</ul>}
+      </button>{r.status === 'REJECTED' && <div className="submission-resubmit"><ResubmitReceiptLink receipt={r} /></div>}</li>)}</ul>}
       {data && !visible.length && <p className="list-empty">해당 상태의 제출 내역이 없습니다.</p>}
     </section>
     {selectedId && <ReceiptDetail key={selectedId} id={selectedId} onClose={() => setSelectedId(null)} />}

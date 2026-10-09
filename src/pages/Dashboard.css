@@ -40,3 +40,5 @@
   .submission-side { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; }
   .submission-chevron { position: absolute; top: 20px; right: 6px; }
 }
+
+.submission-resubmit { display: flex; justify-content: flex-end; padding: 0 12px 18px; }
