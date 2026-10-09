@@ -33,7 +33,7 @@ const sessionStore = await import('../src/api/session.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
 const originalConsoleError = console.error;
 let apiErrorLogs;
-const { STATUS_LABELS } = await import('../src/api/contracts.js');
+const { categoryNameFor, historyActionLabel, receiptIdOf, STATUS_LABELS } = await import('../src/api/contracts.js');
 const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequests.js');
 beforeEach(() => {
   apiErrorLogs = [];
@@ -64,6 +64,62 @@ test('세션 저장/조회/로그아웃은 기존 키와 구독 동작 유지', 
   assert.equal(sessionStore.getSession(), null);
   assert.equal(notifications, 2);
   unsubscribe();
+});
+
+test('영수증 ID는 Real id와 Mock receiptId 형식을 모두 지원', () => {
+  assert.equal(receiptIdOf({ id: 123 }), 123);
+  assert.equal(receiptIdOf({ receiptId: 456 }), 456);
+  assert.equal(receiptIdOf({ id: 123, receiptId: 456 }), 456);
+});
+
+test('상세 카테고리명은 응답값을 우선하고 목록에서 없으면 ID로 찾음', () => {
+  const categories = [{ id: 1, name: '식비' }, { id: 2, name: '교통비' }];
+  assert.equal(categoryNameFor({ categoryName: 'Mock 이름', categoryId: 1 }, categories), 'Mock 이름');
+  assert.equal(categoryNameFor({ categoryId: 2 }, categories), '교통비');
+  assert.equal(categoryNameFor({ categoryId: 9 }, categories), '카테고리 정보 없음');
+  assert.equal(categoryNameFor({ categoryId: 2 }, null), '카테고리 정보 없음');
+});
+
+test('처리 이력 코드를 기존·Real alias 한글명으로 표시하고 알 수 없는 코드는 유지', () => {
+  assert.equal(historyActionLabel('SUBMIT'), '영수증 제출');
+  assert.equal(historyActionLabel('SUBMITTED'), '영수증 제출');
+  assert.equal(historyActionLabel('OCR_PENDING'), '영수증 인식 대기');
+  assert.equal(historyActionLabel('OCR_DONE'), '영수증 인식 완료');
+  assert.equal(historyActionLabel('REVIEW'), '관리자 검토');
+  assert.equal(historyActionLabel('EDIT_OCR'), '영수증 인식 정보 수정');
+  assert.equal(historyActionLabel('APPROVE'), '승인 완료');
+  assert.equal(historyActionLabel('REJECT'), '반려');
+  assert.equal(historyActionLabel('SETTLE'), '정산 완료');
+  assert.equal(historyActionLabel('OCR_RETRY_REQUESTED'), 'OCR 재처리 요청');
+  assert.equal(historyActionLabel('FUTURE_ACTION'), 'FUTURE_ACTION');
+});
+
+test('저장된 세션 복원은 현재 사용자로 갱신하고 동시 요청을 공유', async () => {
+  const login = await api.login('user1@test.com', '1234');
+  sessionStore.setSession({ ...login.data, user: { ...login.data.user, name: '오래된 사용자명' } });
+  const first = api.restoreSession();
+  const second = api.restoreSession();
+  assert.equal(first, second);
+  const user = await first;
+  assert.equal(user.name, '김민서');
+  assert.equal(sessionStore.getSession().accessToken, login.data.accessToken);
+  assert.equal(sessionStore.getSession().user.name, '김민서');
+});
+
+test('저장된 세션 복원에서 401이면 세션을 삭제', async () => {
+  const originalAdapter = apiClient.defaults.adapter;
+  sessionStore.setSession({ accessToken: 'expired-token', user: { id: 1, name: '김민서', role: 'USER' } });
+  apiClient.defaults.adapter = async (config) => ({
+    data: { success: false, message: '로그인이 필요합니다.', errorCode: 'UNAUTHORIZED' },
+    status: 401, statusText: 'Unauthorized', headers: {}, config,
+  });
+  try {
+    await assert.rejects(api.restoreSession(), (error) => error.response?.status === 401);
+    assert.equal(sessionStore.getSession(), null);
+    assert.equal(session.getItem('duesflow.session.v2'), null);
+  } finally {
+    apiClient.defaults.adapter = originalAdapter;
+  }
 });
 
 test('API 계약: 신규 제출 OCR_PENDING 유지, 샘플 ADMIN 처리 및 USER 조회', async () => {

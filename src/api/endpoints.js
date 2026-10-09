@@ -1,12 +1,35 @@
 import { apiRequest } from './client.js';
 import { invalidateQueries } from './mockStore.js';
-import { setSession } from './session.js';
+import { getSession, logout, setSession } from './session.js';
+let sessionVerification = null;
 export async function login(email, password) {
   const response = await apiRequest({ method: 'POST', url: '/auth/login', data: { email, password } });
   setSession(response.data);
   return response;
 }
 export const getCurrentUser = () => apiRequest({ method: 'GET', url: '/users/me' });
+export function restoreSession() {
+  const session = getSession();
+  if (!session?.accessToken) return Promise.resolve(null);
+  if (sessionVerification?.token === session.accessToken) return sessionVerification.promise;
+
+  const token = session.accessToken;
+  const request = getCurrentUser().then(({ data: user }) => {
+    const activeSession = getSession();
+    if (activeSession?.accessToken === token) setSession({ ...activeSession, user });
+    return user;
+  }).catch((error) => {
+    const activeSession = getSession();
+    const unauthorized = error.response?.status === 401 || ['AUTH_REQUIRED', 'UNAUTHORIZED'].includes(error.errorCode);
+    if (activeSession?.accessToken === token && unauthorized) logout();
+    throw error;
+  });
+  const sharedRequest = request.finally(() => {
+    if (sessionVerification?.promise === sharedRequest) sessionVerification = null;
+  });
+  sessionVerification = { token, promise: sharedRequest };
+  return sharedRequest;
+}
 export const getCategories = () => apiRequest({ method: 'GET', url: '/categories' });
 export const getMyReceipts = (params = {}) => apiRequest({ method: 'GET', url: '/receipts/my', params });
 export const getAdminReceipts = (params = {}) => apiRequest({ method: 'GET', url: '/admin/receipts', params });

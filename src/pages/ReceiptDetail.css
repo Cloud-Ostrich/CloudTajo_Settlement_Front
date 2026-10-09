@@ -1,4 +1,6 @@
-.receipt-detail-dialog > .card-heading { padding-bottom: 16px; border-bottom: 1px solid #edf0f4; margin-bottom: 22px; }
+.receipt-detail-dialog { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.receipt-detail-dialog > .card-heading { position: sticky; top: 0; z-index: 1; flex-shrink: 0; padding: 20px 24px 16px; border-bottom: 1px solid #edf0f4; margin-bottom: 0; background: white; }
+.receipt-detail-dialog-body { min-height: 0; flex: 1; overflow-y: auto; padding: 4px 24px 24px; overscroll-behavior: contain; }
 .receipt-detail-dialog .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 0; border-radius: 50%; color: #64748b; background: transparent; }
 .receipt-detail-dialog .modal-close:hover { background: #f0f4f2; color: #078642; }
 .receipt-detail-dialog .modal-close:focus-visible { outline: 2px solid #078642; outline-offset: 2px; }
@@ -18,6 +20,8 @@
 .timeline-content p { color: #64748b; font-size: 12px; margin-top: 6px; line-height: 1.7; white-space: pre-wrap; }
 .receipt-timeline time { flex-shrink: 0; color: #758195; font-size: 12px; }
 @media (max-width: 600px) {
+  .receipt-detail-dialog > .card-heading { padding: 16px 16px 12px; }
+  .receipt-detail-dialog-body { padding: 4px 16px 16px; }
   .receipt-detail-dialog .receipt-detail-info { padding: 16px; }
   .receipt-timeline li { flex-wrap: wrap; gap: 6px; }
   .receipt-timeline time { max-width: 100%; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { approveReceipt, rejectReceipt, settleReceipt, updateOcr } from '../api/endpoints';
-import { HISTORY_ACTION_LABELS, REVIEWABLE, money, today } from '../api/contracts';
+import { categoryNameFor, historyActionLabel, receiptIdOf, REVIEWABLE, money, today } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
@@ -31,16 +31,19 @@ function DetailActions({ receipt, onRefresh }) {
 }
 function ApprovalDetail({ id }) {
   const { data: response, error, reload } = useApiData(`/receipts/${id}`);
+  const { data: categories } = useApiData(response && !response.categoryName ? '/categories' : null);
   const { data: histories } = useApiData(`/receipts/${id}/histories`);
   if (error) return <section className="receipt-card"><p role="alert">{error}</p><button className="text-button" onClick={reload}>다시 시도</button></section>;
   if (!response) return <section className="receipt-card" role="status">상세 정보를 불러오는 중…</section>;
   const timeline = (histories || []).map((item) => ({
     ...item,
-    label: HISTORY_ACTION_LABELS[item.action] || item.action,
+    label: historyActionLabel(item.action),
     comment: item.snapshot?.comment || '',
   }));
   const receipt = {
     ...response,
+    receiptId: receiptIdOf(response),
+    categoryName: categoryNameFor(response, categories),
     user: response.submitter,
     confidence: response.ocrResult?.confidence ?? null,
     history: timeline,
@@ -49,7 +52,7 @@ function ApprovalDetail({ id }) {
   };
   return <section className="receipt-card approval-detail" aria-label="영수증 검토 상세"><div className="card-heading"><h2>제출 상세 #{receipt.receiptId}</h2><StatusBadge status={receipt.status} /></div>
     <div className="admin-review-columns"><div className="admin-original"><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div><div className="admin-review-info">
-    <h3 className="section-title">제출 정보</h3><dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div><div><dt>제출자</dt><dd>{receipt.user.name}</dd></div><div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
+    <h3 className="section-title">제출 정보</h3><dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div>{receipt.user?.name && <div><dt>제출자</dt><dd>{receipt.user.name}</dd></div>}<div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
     <DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={reload} />{receipt.status === 'REJECTED' && receipt.rejectReason && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason}</p></div>}{receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
     </div></div>
     {!!receipt.history?.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{receipt.history.map((item, index) => <li key={index}><div className="timeline-content"><strong>{item.label === 'Mock OCR 완료' ? 'OCR 처리 완료' : item.label}</strong>{(item.reason || item.comment) && <p>{item.reason || item.comment}</p>}</div><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol></>}
@@ -58,7 +61,7 @@ function ApprovalDetail({ id }) {
 }
 export default function AdminApproval() {
   const { data, error, reload } = useApiData('/admin/receipts');
-  const receipts = (data?.items || []).map((item) => ({ ...item, user: { name: item.submitterName } }));
+  const receipts = (data?.items || []).map((item) => ({ ...item, receiptId: receiptIdOf(item), user: { name: item.submitterName } }));
   const [filter, setFilter] = useState('all');
   const [selectedId, setSelectedId] = useState(null);
   const detailRef = useRef(null);
