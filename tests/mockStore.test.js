@@ -33,7 +33,7 @@ const sessionStore = await import('../src/api/session.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
 const originalConsoleError = console.error;
 let apiErrorLogs;
-const { categoryNameFor, historyActionLabel, receiptIdOf, STATUS_LABELS } = await import('../src/api/contracts.js');
+const { categoryNameFor, historyActionLabel, receiptIdOf, shiftMonth, STATUS_LABELS } = await import('../src/api/contracts.js');
 const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequests.js');
 beforeEach(() => {
   apiErrorLogs = [];
@@ -92,6 +92,12 @@ test('처리 이력 코드를 기존·Real alias 한글명으로 표시하고 �
   assert.equal(historyActionLabel('SETTLE'), '정산 완료');
   assert.equal(historyActionLabel('OCR_RETRY_REQUESTED'), 'OCR 재처리 요청');
   assert.equal(historyActionLabel('FUTURE_ACTION'), 'FUTURE_ACTION');
+});
+
+test('월 이동은 연도 경계를 포함해 YYYY-MM을 유지', () => {
+  assert.equal(shiftMonth('2026-01', -1), '2025-12');
+  assert.equal(shiftMonth('2025-12', 1), '2026-01');
+  assert.equal(shiftMonth('2026-10', -1), '2026-09');
 });
 
 test('저장된 세션 복원은 현재 사용자로 갱신하고 동시 요청을 공유', async () => {

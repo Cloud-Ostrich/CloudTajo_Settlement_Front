@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../api/client';
 import { useApiData } from '../hooks/useMockData';
-import { money, receiptIdOf, today } from '../api/contracts';
+import { money, receiptIdOf, shiftMonth, today } from '../api/contracts';
 import './Receipts.css';
 import './Workspace.css';
 import './Admin.css';
 export default function AdminDashboard() {
-  const month = today().slice(0, 7);
+  const [month, setMonth] = useState(() => today().slice(0, 7));
+  const currentMonth = today().slice(0, 7);
+  const [year, monthNumber] = month.split('-');
+  const monthLabel = `${year}년 ${Number(monthNumber)}월`;
   const { data: apiData, error, reload } = useApiData('/admin/dashboard/summary', { month });
   const { data: receiptData } = useApiData('/admin/receipts');
   const [avgReviewMinutes, setAvgReviewMinutes] = useState(0);
@@ -29,10 +32,13 @@ export default function AdminDashboard() {
     });
     return () => { active = false; };
   }, [apiData?.month, receiptData]);
+  const categorySummaries = Array.isArray(apiData?.categorySummaries)
+    ? apiData.categorySummaries
+    : Array.isArray(apiData?.categoryStats) ? apiData.categoryStats : [];
   const data = apiData && {
     ...apiData,
     avgReviewMinutes: apiData.averageReviewMinutes ?? avgReviewMinutes,
-    categoryStats: (Array.isArray(apiData.categoryStats) ? apiData.categoryStats : []).map((category) => ({ ...category, totalAmount: category.amount })),
+    categoryStats: categorySummaries.map((category) => ({ ...category, totalAmount: category.amount })),
   };
-  return <section className="workspace-page admin-dashboard"><div className="heading-row"><div className="page-heading"><span className="eyebrow">ADMIN OVERVIEW</span><h1>운영 대시보드</h1><p>{data?.month || '이번 달'} 정산 현황을 확인하세요.</p></div><Link className="button primary" to="/admin/approvals">승인 관리 →</Link></div>{error && <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p>}{!data && !error && <p role="status">운영 현황 불러오는 중…</p>}{data && <><div className="summary-grid">{[['총 제출 금액', money(data.totalAmount)], ['승인 금액', data.approvedAmount == null ? '집계 정보 없음' : money(data.approvedAmount)], ['처리 대기', `${data.pendingCount}건`], ['반려', `${data.rejectedCount}건`], ['정산 완료', data.settledCount == null ? '집계 정보 없음' : `${data.settledCount}건`], ['평균 검토 시간', `${data.avgReviewMinutes}분`]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div><section className="receipt-card"><h2>카테고리별 제출 현황</h2><div className="table-scroll"><table className="request-table"><thead><tr><th>카테고리</th><th>건수</th><th>금액</th></tr></thead><tbody>{data.categoryStats.map((c) => <tr key={c.categoryId}><td>{c.categoryName}</td><td>{c.count}건</td><td>{money(c.totalAmount)}</td></tr>)}</tbody></table></div></section></>}</section>;
+  return <section className="workspace-page admin-dashboard"><div className="heading-row"><div className="page-heading"><span className="eyebrow">ADMIN OVERVIEW</span><h1>운영 대시보드</h1><p>{monthLabel} 정산 현황</p></div><Link className="button primary" to="/admin/approvals">승인 관리 →</Link></div><div className="admin-month-controls" aria-label="월별 조회"><button type="button" className="admin-month-step" aria-label="이전 달" title="이전 달" onClick={() => setMonth((selectedMonth) => shiftMonth(selectedMonth, -1))}>◀</button><label className="admin-month-select">조회 월<input type="month" aria-label="조회 월" value={month} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} /></label><button type="button" className="admin-month-step" aria-label="다음 달" title="다음 달" onClick={() => setMonth((selectedMonth) => shiftMonth(selectedMonth, 1))}>▶</button><button type="button" className="button secondary admin-current-month" disabled={month === currentMonth} onClick={() => setMonth(currentMonth)}>이번 달</button></div>{error && <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p>}{!data && !error && <p role="status">운영 현황 불러오는 중…</p>}{data && <><div className="summary-grid">{[['총 제출 금액', money(data.totalAmount)], ['승인 금액', data.approvedAmount == null ? '집계 정보 없음' : money(data.approvedAmount)], ['처리 대기', `${data.pendingCount}건`], ['반려', `${data.rejectedCount}건`], ['정산 완료', data.settledCount == null ? '집계 정보 없음' : `${data.settledCount}건`], ['평균 검토 시간', `${data.avgReviewMinutes}분`]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div><section className="receipt-card"><h2>카테고리별 제출 현황</h2><div className="table-scroll"><table className="request-table"><thead><tr><th>카테고리</th><th>건수</th><th>금액</th></tr></thead><tbody>{data.categoryStats.map((c) => <tr key={c.categoryId}><td>{c.categoryName}</td><td>{c.count}건</td><td>{money(c.totalAmount)}</td></tr>)}</tbody></table></div></section></>}</section>;
 }

@@ -26,6 +26,13 @@ export function categoryNameFor(receipt, categories) {
   if (receipt?.categoryName) return receipt.categoryName;
   return categories?.find((category) => category.id === receipt?.categoryId)?.name || '카테고리 정보 없음';
 }
+export function shiftMonth(month, offset) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const absoluteMonth = year * 12 + monthNumber - 1 + offset;
+  const shiftedYear = Math.floor(absoluteMonth / 12);
+  const shiftedMonth = ((absoluteMonth % 12) + 12) % 12 + 1;
+  return `${shiftedYear}-${String(shiftedMonth).padStart(2, '0')}`;
+}
 export function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
 export const SUBMISSION_SUMMARIES = [

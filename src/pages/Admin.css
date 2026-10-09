@@ -2,6 +2,14 @@
 .admin-dashboard .summary-card { gap: 12px; padding: 22px; border-radius: 12px; }
 .admin-dashboard .summary-value { font-variant-numeric: tabular-nums; }
 .admin-dashboard .request-table { min-width: 0; margin-top: 20px; }
+.admin-month-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -8px 0 24px; }
+.admin-month-select { display: flex; align-items: center; gap: 10px; color: #64748b; font-size: 13px; }
+.admin-month-select input { min-height: 42px; padding: 8px 10px; border: 1px solid #d5dfda; border-radius: 8px; background: white; color: #233349; font: inherit; }
+.admin-month-step { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #d5dfda; border-radius: 8px; background: white; color: #17683e; }
+.admin-month-step:hover, .admin-month-select input:hover { border-color: #078642; }
+.admin-month-step:focus-visible, .admin-month-select input:focus-visible, .admin-current-month:focus-visible { outline: 2px solid #078642; outline-offset: 2px; }
+.admin-current-month { min-height: 42px; }
+.admin-current-month:disabled { opacity: .58; }
 .admin-page .approval-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 .admin-page .admin-summary { background: #f0faf4; padding: 16px 20px; }
 .admin-page .admin-table { min-width: 0; }

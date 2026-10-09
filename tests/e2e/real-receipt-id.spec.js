@@ -57,7 +57,7 @@ realModeTest('Real API id 목록에서 상세와 이력 요청을 올바른 ID�
 });
 
 realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async ({ page }) => {
-  let requestedMonth;
+  const requestedMonths = [];
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.route('http://127.0.0.1:5181/api/**', async (route) => {
@@ -66,8 +66,10 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
     if (url.pathname === '/api/auth/login') {
       data = { accessToken: 'real-admin-token', user: { id: 3, name: '관리자', email: 'admin@test.com', role: 'ADMIN' } };
     } else if (url.pathname === '/api/admin/dashboard/summary') {
-      requestedMonth = url.searchParams.get('month');
-      data = { month: requestedMonth, totalAmount: 24500, categorySummaries: [], pendingCount: 2, rejectedCount: 1, averageReviewMinutes: 17 };
+      const requestedMonth = url.searchParams.get('month');
+      requestedMonths.push(requestedMonth);
+      const totalAmount = requestedMonth === '2025-12' ? 12500 : requestedMonth === '2026-02' ? 26000 : 18000;
+      data = { month: requestedMonth, totalAmount, categorySummaries: [{ categoryId: 1, categoryName: `${requestedMonth} 식비`, amount: totalAmount, count: 1 }], pendingCount: 2, rejectedCount: 1, averageReviewMinutes: 17 };
     } else if (url.pathname === '/api/admin/receipts') {
       data = { items: [], totalCount: 0 };
     } else {
@@ -76,6 +78,7 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, message: 'OK', data }) });
   });
 
+  await page.clock.install({ time: new Date('2026-01-15T03:00:00.000Z') });
   await page.goto('/');
   await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
   await page.getByLabel('비밀번호', { exact: true }).fill('password');
@@ -85,6 +88,34 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await expect(page.locator('.summary-card').filter({ hasText: '승인 금액' })).toContainText('집계 정보 없음');
   await expect(page.locator('.summary-card').filter({ hasText: '정산 완료' })).toContainText('집계 정보 없음');
   await expect(page.locator('.summary-card').filter({ hasText: '평균 검토 시간' })).toContainText('17분');
-  await expect.poll(() => requestedMonth).toMatch(/^\d{4}-\d{2}$/);
+  const monthInput = page.getByLabel('조회 월');
+  const totalAmountCard = page.locator('.summary-card').filter({ hasText: '총 제출 금액' });
+  await expect(monthInput).toHaveValue('2026-01');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2026-01');
+  await expect(page.getByText('2026년 1월 정산 현황')).toBeVisible();
+  const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+
+  await page.getByRole('button', { name: '이전 달' }).click();
+  await expect(monthInput).toHaveValue('2025-12');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2025-12');
+  await expect(totalAmountCard).toContainText('12,500원');
+  await expect(page.getByText('2025-12 식비', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '다음 달' }).click();
+  await expect(monthInput).toHaveValue('2026-01');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2026-01');
+  await expect(totalAmountCard).toContainText('18,000원');
+
+  await page.getByRole('button', { name: '다음 달' }).click();
+  await expect(monthInput).toHaveValue('2026-02');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2026-02');
+  await expect(totalAmountCard).toContainText('26,000원');
+
+  await monthInput.fill('2025-11');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2025-11');
+  await page.getByRole('button', { name: '이번 달' }).click();
+  await expect(monthInput).toHaveValue('2026-01');
+  await expect.poll(() => requestedMonths.at(-1)).toBe('2026-01');
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
   expect(pageErrors).toEqual([]);
 });
