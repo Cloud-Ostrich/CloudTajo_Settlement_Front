@@ -33,7 +33,7 @@ const sessionStore = await import('../src/api/session.js');
 const { apiClient, apiRequest } = await import('../src/api/client.js');
 const originalConsoleError = console.error;
 let apiErrorLogs;
-const { categoryNameFor, formatReviewMinutes, historyActionLabel, receiptIdOf, shiftMonth, STATUS_LABELS } = await import('../src/api/contracts.js');
+const { categoryNameFor, formatDashboardMetric, formatReviewMinutes, historyActionLabel, receiptIdOf, shiftMonth, STATUS_LABELS } = await import('../src/api/contracts.js');
 const { DEFAULT_REQUESTS, normalizeRequest } = await import('../src/api/mockRequests.js');
 beforeEach(() => {
   apiErrorLogs = [];
@@ -412,4 +412,13 @@ test('상세/HIS Response: createdAt 이력 호환과 imageUrl 보존', async ()
   assert.ok(Number.isFinite(Date.parse(histories.at(-1).createdAt)));
   assert.ok(!('at' in histories.at(-1)));
   assert.deepEqual(histories.at(-1).snapshot, { comment: '검토 완료' });
+});
+
+
+test('대시보드 집계는 0, null, 누락을 구분하고 OCR 원본을 사용하지 않음', () => {
+  assert.equal(formatDashboardMetric(0, '원'), '0원');
+  assert.equal(formatDashboardMetric(0, '건'), '0건');
+  assert.equal(formatDashboardMetric(null, '원'), '집계값 없음');
+  assert.equal(formatDashboardMetric(undefined, '건'), '집계 정보 없음');
+  for (const value of ['2300', -1, NaN, Infinity]) assert.equal(formatDashboardMetric(value, '원'), '집계 정보 없음');
 });

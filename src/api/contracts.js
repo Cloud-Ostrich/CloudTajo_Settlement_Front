@@ -33,6 +33,11 @@ export function shiftMonth(month, offset) {
   const shiftedMonth = ((absoluteMonth % 12) + 12) % 12 + 1;
   return `${shiftedYear}-${String(shiftedMonth).padStart(2, '0')}`;
 }
+export function formatDashboardMetric(value, unit) {
+  if (value === null) return '집계값 없음';
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '집계 정보 없음';
+  return unit === '원' ? money(value) : `${value.toLocaleString('ko-KR')}${unit}`;
+}
 export function formatReviewMinutes(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '집계 정보 없음';
   const rounded = Number(value.toFixed(1));

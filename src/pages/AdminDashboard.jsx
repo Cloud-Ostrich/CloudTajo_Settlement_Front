@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApiData } from '../hooks/useMockData';
-import { formatReviewMinutes, money, shiftMonth, today } from '../api/contracts';
+import { formatDashboardMetric, formatReviewMinutes, shiftMonth, today } from '../api/contracts';
 import './Receipts.css';
 import './Workspace.css';
 import './Admin.css';
@@ -16,10 +16,10 @@ export default function AdminDashboard() {
   const { data: apiData, error, reload } = useApiData('/admin/dashboard/summary', { month });
   const categorySummaries = Array.isArray(apiData?.categorySummaries)
     ? apiData.categorySummaries
-    : Array.isArray(apiData?.categoryStats) ? apiData.categoryStats : [];
+    : Array.isArray(apiData?.categoryStats) ? apiData.categoryStats : null;
   const data = apiData && {
     ...apiData,
-    categoryStats: categorySummaries.map((category) => ({ ...category, totalAmount: category.amount })),
+    categoryStats: (categorySummaries || []).map((category) => ({ ...category, totalAmount: category.amount })),
   };
   return (
     <section className="workspace-page admin-dashboard">
@@ -43,8 +43,8 @@ export default function AdminDashboard() {
       {error && <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p>}
       {!data && !error && <p role="status">운영 현황 불러오는 중…</p>}
       {data && <>
-        <div className="summary-grid">{[['총 제출 금액', money(data.totalAmount)], ['승인 금액', data.approvedAmount == null ? '집계 정보 없음' : money(data.approvedAmount)], ['처리 대기', `${data.pendingCount}건`], ['반려', `${data.rejectedCount}건`], ['정산 완료', data.settledCount == null ? '집계 정보 없음' : `${data.settledCount}건`], ['평균 검토 시간', formatReviewMinutes(data.averageReviewMinutes)]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div>
-        <section className="receipt-card"><h2>카테고리별 제출 현황</h2><div className="table-scroll"><table className="request-table"><thead><tr><th>카테고리</th><th>건수</th><th>금액</th></tr></thead><tbody>{data.categoryStats.map((category) => <tr key={category.categoryId}><td>{category.categoryName}</td><td>{category.count}건</td><td>{money(category.totalAmount)}</td></tr>)}</tbody></table></div></section>
+        <div className="summary-grid">{[['총 제출 금액', formatDashboardMetric(data.totalAmount, '원')], ['승인 금액', formatDashboardMetric(data.approvedAmount, '원')], ['처리 대기', formatDashboardMetric(data.pendingCount, '건')], ['반려', formatDashboardMetric(data.rejectedCount, '건')], ['정산 완료', formatDashboardMetric(data.settledCount, '건')], ['평균 검토 시간', data.averageReviewMinutes === null ? '집계값 없음' : formatReviewMinutes(data.averageReviewMinutes)]].map(([label, value]) => <div className="receipt-card summary-card" key={label}><span className="muted">{label}</span><strong className="summary-value">{value}</strong></div>)}</div>
+        <section className="receipt-card"><h2>카테고리별 제출 현황</h2><div className="table-scroll"><table className="request-table"><thead><tr><th>카테고리</th><th>건수</th><th>금액</th></tr></thead><tbody>{data.categoryStats.map((category) => <tr key={category.categoryId}><td>{category.categoryName}</td><td>{formatDashboardMetric(category.count, '건')}</td><td>{formatDashboardMetric(category.totalAmount, '원')}</td></tr>)}</tbody></table></div>{!data.categoryStats.length && <p className="muted" role="status">{categorySummaries === null ? '카테고리 집계 정보가 제공되지 않았습니다.' : '해당 월의 카테고리 집계가 없습니다.'}</p>}</section>
       </>}
     </section>
   );

@@ -2,6 +2,36 @@ import { test, expect } from '@playwright/test';
 
 const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 
+for (const kind of ['zero', 'null', 'missing']) {
+  realModeTest(`운영 집계의 0/null/누락 표시: ${kind}`, async ({ page }) => {
+    const requestedPaths = [];
+    await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      requestedPaths.push(path);
+      let data;
+      if (path === '/api/auth/login') data = { accessToken: 'test-token', user: { id: 3, role: 'ADMIN', name: '관리자' } };
+      else if (path === '/api/admin/dashboard/summary') {
+        data = kind === 'missing' ? {} : Object.fromEntries(['totalAmount', 'approvedAmount', 'pendingCount', 'rejectedCount', 'settledCount', 'averageReviewMinutes'].map((field) => [field, kind === 'zero' ? 0 : null]));
+        if (kind !== 'missing') data.categorySummaries = kind === 'zero' ? [] : null;
+        // OCR payload must never be used to invent summary totals.
+        data.ocrResult = { amountRaw: 100000 };
+      } else return route.fulfill({ status: 404, json: { success: false } });
+      await route.fulfill({ json: { success: true, data } });
+    });
+    await page.goto('/');
+    await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
+    await page.getByLabel('비밀번호', { exact: true }).fill('password');
+    await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+    const labels = ['총 제출 금액', '승인 금액', '처리 대기', '반려', '정산 완료', '평균 검토 시간'];
+    for (const [index, label] of labels.entries()) {
+      const expected = kind === 'zero' ? index < 2 ? '0원' : index === 5 ? '0분' : '0건' : kind === 'null' ? '집계값 없음' : '집계 정보 없음';
+      await expect(page.locator('.summary-card').filter({ hasText: label }).locator('strong')).toHaveText(expected);
+    }
+    await expect(page.getByText(kind === 'zero' ? '해당 월의 카테고리 집계가 없습니다.' : '카테고리 집계 정보가 제공되지 않았습니다.', { exact: true })).toBeVisible();
+    expect(requestedPaths.every((path) => ['/api/auth/login', '/api/admin/dashboard/summary'].includes(path))).toBe(true);
+  });
+}
+
 realModeTest('관리자 목록: 필요한 상세만 조회하고 최종값/OCR/실패/필터 캐시 처리', async ({ page }) => {
   const reads = [];
   const mutations = [];
