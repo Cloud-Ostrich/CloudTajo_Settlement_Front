@@ -88,7 +88,7 @@ for (const kind of ['zero', 'null', 'missing']) {
     await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
     await page.getByLabel('비밀번호', { exact: true }).fill('password');
     await page.getByRole('button', { name: '로그인 →', exact: true }).click();
-    const labels = ['총 제출 금액', '승인 금액', '처리 대기', '반려', '정산 완료', '평균 검토 시간'];
+    const labels = ['총 승인·정산 금액', '정산 대기 금액', '처리 대기', '반려', '정산 완료', '평균 검토 시간'];
     for (const [index, label] of labels.entries()) {
       const expected = kind === 'zero' ? index < 2 ? '0원' : index === 5 ? '0분' : '0건' : kind === 'null' ? '집계값 없음' : '집계 정보 없음';
       await expect(page.locator('.summary-card').filter({ hasText: label }).locator('strong')).toHaveText(expected);
@@ -338,12 +338,12 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await page.getByRole('button', { name: '로그인 →', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/dashboard$/);
   await expect(page.getByRole('heading', { name: '카테고리별 제출 현황' })).toBeVisible();
-  await expect(page.locator('.summary-card').filter({ hasText: '승인 금액' })).toContainText('집계 정보 없음');
+  await expect(page.locator('.summary-card').filter({ hasText: '정산 대기 금액' })).toContainText('집계 정보 없음');
   await expect(page.locator('.summary-card').filter({ hasText: '정산 완료' })).toContainText('집계 정보 없음');
   await expect(page.locator('.summary-card').filter({ hasText: '평균 검토 시간' })).toContainText('집계 정보 없음');
   const yearSelect = page.getByLabel('조회 연도');
   const monthSelect = page.getByLabel('조회 월');
-  const totalAmountCard = page.locator('.summary-card').filter({ hasText: '총 제출 금액' });
+  const totalAmountCard = page.locator('.summary-card').filter({ hasText: '총 승인·정산 금액' });
   await expect(yearSelect).toHaveValue('2026');
   await expect(monthSelect).toHaveValue('01');
   await expect(yearSelect.locator('option')).toHaveCount(7);
