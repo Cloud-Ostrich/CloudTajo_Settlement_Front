@@ -1,5 +1,6 @@
+import { missingApprovalFields } from '../api/approvalValidation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { approveReceipt, rejectReceipt, settleReceipt, updateOcr } from '../api/endpoints';
+import { approveReceipt, rejectReceipt, settleReceipt, updateOcr, getReceipt } from '../api/endpoints';
 import { categoryNameFor, submitterLabel, historyActionLabel, receiptIdOf, REVIEWABLE, money, today } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
 import { receiptPreviewValues, useAdminReceiptPreviews } from '../hooks/useAdminReceiptPreviews';
@@ -24,21 +25,48 @@ function DetailActions({ receipt, onRefresh }) {
   const [notice, setNotice] = useState('');
   const [confirmation, setConfirmation] = useState(null);
   const pending = useRef(false);
+  const editRef = useRef(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   async function run(operation, message) {
     if (pending.current) return;
     pending.current = true;
     setBusy(true); setError(''); setNotice('');
-    try { await operation(); setEditing(false); setRejecting(false); setNotice(message); onRefresh(); }
+    try {
+      await operation();
+      setRefreshFailed(true);
+      try { await onRefresh(); } catch { throw new Error('처리는 완료되었지만 최신 영수증 정보를 불러오지 못했습니다. 새로고침 후 다시 확인해주세요.'); }
+      setRefreshFailed(false);
+      setEditing(false); setRejecting(false); setNotice(message);
+    }
     catch (err) { setError(err.message); }
     finally { pending.current = false; setBusy(false); setConfirmation(null); }
   }
   const reviewable = REVIEWABLE.includes(receipt.status);
   function edit() { setValues({ merchantName: receipt.merchantName ?? receipt.ocrResult?.merchantNameRaw ?? '', paidAt: receipt.paidAt ?? receipt.ocrResult?.paidAtRaw ?? '', amount: receipt.amount ?? receipt.ocrResult?.amountRaw ?? '', reason: '' }); setEditing(true); setRejecting(false); }
-  return <><div className="card-heading section-title"><h3>OCR 결과</h3>{reviewable && <button className="text-button" disabled={busy} onClick={edit}>OCR 수정</button>}</div><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName || '인식 대기'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt || '인식 대기'}</dd></div><div><dt>총 금액</dt><dd className="detail-amount">{money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.confidence == null ? '인식 대기' : `${Math.round(receipt.confidence * 100)}%`}</dd></div></dl>{editing && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); run(() => updateOcr(receipt.receiptId, { ...values, amount: Number(values.amount) }), 'OCR 결과를 수정했습니다.'); }}><fieldset disabled={busy}>{[['merchantName', '사용처', 'text'], ['paidAt', '결제일', 'date'], ['amount', '총 금액 (원)', 'text']].map(([name, label, type]) => <label key={name}>{label}<input type={type} value={values[name]} inputMode={name === 'amount' ? 'numeric' : undefined} pattern={name === 'amount' ? '[0-9]+' : undefined} required onChange={(e) => setValues({ ...values, [name]: e.target.value })} /></label>)}<label>수정 사유 (필수)<textarea value={values.reason} required maxLength={500} onChange={(e) => setValues({ ...values, reason: e.target.value })} rows={3} /></label></fieldset><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setEditing(false)}>취소</button><button className="button primary" disabled={busy}>OCR 수정 저장</button></div></form>}{reviewable && !editing && <div className="review-form"><label className="section-title">검토 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={500} disabled={busy} /></label><div className="decision-actions"><button className="button danger" disabled={busy} onClick={() => setRejecting(true)}>반려</button><button className="button primary" disabled={busy || rejecting} onClick={() => setConfirmation({ message: '이 영수증을 승인하시겠습니까?', operation: () => approveReceipt(receipt.receiptId, { comment }), success: '요청을 승인했습니다.' })}>승인</button></div></div>}{rejecting && reviewable && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); if (rejectReason.trim()) setConfirmation({ message: '이 영수증을 반려하시겠습니까?', operation: () => rejectReceipt(receipt.receiptId, { rejectReason }), success: '사유와 함께 반려했습니다.' }); }}><label>반려 사유 (필수)<textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} required maxLength={500} rows={3} disabled={busy} placeholder="영수증 이미지가 흐려 금액 확인이 어렵습니다." /></label><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setRejecting(false)}>취소</button><button className="button danger" disabled={busy || !rejectReason.trim()}>반려 처리</button></div></form>}{receipt.status === 'APPROVED' && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); setConfirmation({ message: '정산 완료 처리하시겠습니까?', operation: () => settleReceipt(receipt.receiptId, { settledAt, comment }), success: '정산 완료 처리했습니다.' }); }}><fieldset disabled={busy}><label>정산일<input type="date" value={settledAt} onChange={(e) => setSettledAt(e.target.value)} required /></label><label>정산 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={2} /></label></fieldset><button className="button primary" disabled={busy}>정산 완료 처리</button></form>}{['SUBMITTED', 'OCR_PENDING'].includes(receipt.status) && <p className="receipt-tip">OCR 처리가 완료되면 검토할 수 있습니다.</p>}{busy && <p className="muted" role="status">처리 중…</p>}{error && <p className="error-message" role="alert">{error}</p>}{notice && <p className="success-message" role="status">{notice}</p>}{confirmation && <ConfirmAction message={confirmation.message} busy={busy} onCancel={() => setConfirmation(null)} onConfirm={() => run(confirmation.operation, confirmation.success)} />}</>;
+  useEffect(() => {
+    if (editing) {
+      editRef.current?.scrollIntoView({ block: 'center' });
+      editRef.current?.querySelector('input')?.focus();
+    }
+  }, [editing]);
+  function requestApproval() {
+    if (pending.current || editing || refreshFailed) return;
+    const missing = missingApprovalFields(receipt);
+    setConfirmation({ missing: missing.length ? missing : null, message: missing.length ? '⚠️ 영수증 필수 정보가 누락되었습니다' : '이 영수증을 승인하시겠습니까?', confirmLabel: missing.length ? '그래도 승인하기' : '승인하기', operation: () => approveReceipt(receipt.receiptId, { comment }), success: '요청을 승인했습니다.' });
+  }
+  return <><div className="card-heading section-title"><h3>OCR 결과</h3>{reviewable && <button className="text-button" disabled={busy} onClick={edit}>OCR 수정</button>}</div><dl className="detail-fields"><div><dt>사용처</dt><dd>{receipt.merchantName || '인식 대기'}</dd></div><div><dt>결제일</dt><dd>{receipt.paidAt || '인식 대기'}</dd></div><div><dt>총 금액</dt><dd className="detail-amount">{money(receipt.amount)}</dd></div><div><dt>인식 신뢰도</dt><dd>{receipt.confidence == null ? '인식 대기' : `${Math.round(receipt.confidence * 100)}%`}</dd></div></dl>{editing && <form ref={editRef} className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); run(() => updateOcr(receipt.receiptId, { ...values, amount: Number(values.amount) }), 'OCR 결과를 수정했습니다.'); }}><fieldset disabled={busy}>{[['merchantName', '사용처', 'text'], ['paidAt', '결제일', 'date'], ['amount', '총 금액 (원)', 'text']].map(([name, label, type]) => <label key={name}>{label}<input type={type} value={values[name]} inputMode={name === 'amount' ? 'numeric' : undefined} pattern={name === 'amount' ? '[0-9]+' : undefined} required onChange={(e) => setValues({ ...values, [name]: e.target.value })} /></label>)}<label>수정 사유 (필수)<textarea value={values.reason} required maxLength={500} onChange={(e) => setValues({ ...values, reason: e.target.value })} rows={3} /></label></fieldset><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setEditing(false)}>취소</button><button className="button primary" disabled={busy}>OCR 수정 저장</button></div></form>}{reviewable && !editing && <div className="review-form"><label className="section-title">검토 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={500} disabled={busy} /></label><div className="decision-actions"><button className="button danger" disabled={busy} onClick={() => setRejecting(true)}>반려</button><button className="button primary" disabled={busy || rejecting || refreshFailed} onClick={requestApproval}>승인</button></div></div>}{rejecting && reviewable && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); if (rejectReason.trim()) setConfirmation({ message: '이 영수증을 반려하시겠습니까?', operation: () => rejectReceipt(receipt.receiptId, { rejectReason }), success: '사유와 함께 반려했습니다.' }); }}><label>반려 사유 (필수)<textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} required maxLength={500} rows={3} disabled={busy} placeholder="영수증 이미지가 흐려 금액 확인이 어렵습니다." /></label><div className="decision-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setRejecting(false)}>취소</button><button className="button danger" disabled={busy || !rejectReason.trim()}>반려 처리</button></div></form>}{receipt.status === 'APPROVED' && <form className="review-form reject-form" onSubmit={(e) => { e.preventDefault(); setConfirmation({ message: '정산 완료 처리하시겠습니까?', operation: () => settleReceipt(receipt.receiptId, { settledAt, comment }), success: '정산 완료 처리했습니다.' }); }}><fieldset disabled={busy}><label>정산일<input type="date" value={settledAt} onChange={(e) => setSettledAt(e.target.value)} required /></label><label>정산 의견 (선택)<textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={2} /></label></fieldset><button className="button primary" disabled={busy}>정산 완료 처리</button></form>}{['SUBMITTED', 'OCR_PENDING'].includes(receipt.status) && <p className="receipt-tip">OCR 처리가 완료되면 검토할 수 있습니다.</p>}{busy && <p className="muted" role="status">처리 중…</p>}{error && <p className="error-message" role="alert">{error}</p>}{notice && <p className="success-message" role="status">{notice}</p>}{confirmation && <ConfirmAction message={confirmation.message} busy={busy} confirmLabel={confirmation.confirmLabel} onCancel={() => setConfirmation(null)} onConfirm={() => { if (confirmation.confirmLabel === '승인하기' && missingApprovalFields(receipt).length) { requestApproval(); } else { run(confirmation.operation, confirmation.success); } }}>{confirmation.missing && <><p>다음 정보가 입력되지 않았습니다.</p><ul>{confirmation.missing.map((label) => <li key={label}>{label}</li>)}</ul>{confirmation.missing.some((label) => ['결제일', '금액'].includes(label)) && <p>결제일·금액 누락은 Cloud Insight 이상 데이터 탐지 대상이며, 정산 집계에 영향을 줄 수 있습니다.</p>}{confirmation.missing.includes('상호명') && <p>상호명 누락은 데이터 완성도 문제입니다.</p>}<p>원본을 확인해 정보를 수정하거나, 누락된 상태로 승인할 수 있습니다.</p><button type="button" className="text-button" disabled={busy} onClick={() => { setConfirmation(null); edit(); }}>OCR 정보 수정하기</button></>}</ConfirmAction>}</>;
 }
 function ApprovalDetail({ id, onProcessed }) {
   const { data: response, error, reload } = useApiData(`/receipts/${id}`);
-  const { data: categories } = useApiData(response && !response.categoryName ? '/categories' : null);
+  const [refreshed, setRefreshed] = useState(null);
+  const detailResponse = refreshed && refreshed.source === response ? refreshed.data : response;
+  async function refreshDetail() {
+    const fresh = await getReceipt(id);
+    setRefreshed({ source: response, data: fresh.data });
+    onProcessed(id);
+    reload();
+  }
+  const { data: categories } = useApiData(detailResponse && !detailResponse.categoryName ? '/categories' : null);
   const { data: histories } = useApiData(`/receipts/${id}/histories`);
   if (error) return <section className="receipt-card"><p role="alert">{error}</p><button className="text-button" onClick={reload}>다시 시도</button></section>;
   if (!response) return <section className="receipt-card" role="status">상세 정보를 불러오는 중…</section>;
@@ -48,10 +76,10 @@ function ApprovalDetail({ id, onProcessed }) {
     comment: item.snapshot?.comment || '',
   }));
   const receipt = {
-    ...response,
-    receiptId: receiptIdOf(response),
-    categoryName: categoryNameFor(response, categories),
-    confidence: response.ocrResult?.confidence ?? null,
+    ...detailResponse,
+    receiptId: receiptIdOf(detailResponse),
+    categoryName: categoryNameFor(detailResponse, categories),
+    confidence: detailResponse.ocrResult?.confidence ?? null,
     history: timeline,
     rejectReason: [...timeline].reverse().find((item) => item.action === 'REJECTED')?.reason || '',
     settledAt: [...timeline].reverse().find((item) => item.action === 'SETTLED')?.snapshot?.settledAt || null,
@@ -65,7 +93,7 @@ function ApprovalDetail({ id, onProcessed }) {
         <dl className="detail-fields"><div><dt>제출 번호</dt><dd>#{receipt.receiptId}</dd></div><div><dt>제출자</dt><dd>{submitterLabel(receipt)}</dd></div><div><dt>사용 목적</dt><dd>{receipt.purpose}</dd></div><div><dt>카테고리</dt><dd>{receipt.categoryName}</dd></div>{receipt.memo && <div><dt>메모</dt><dd>{receipt.memo}</dd></div>}</dl>
         <OcrResultDetails ocrResult={receipt.ocrResult} workflowStatus={receipt.status} finalValues={receipt} />
         {['APPROVED', 'SETTLED'].includes(receipt.status) && [receipt.merchantName, receipt.paidAt, receipt.amount].some((value) => value == null) && <p className="receipt-tip" role="status">승인된 영수증의 최종 정보 일부가 비어 있습니다. 승인 상태는 유지되며, 표시된 OCR 인식값과 저장된 최종 정보가 다를 수 있습니다.</p>}
-        <div className="admin-final-actions"><DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={() => { onProcessed(receipt.receiptId); reload(); }} /></div>
+        <div className="admin-final-actions"><DetailActions key={receipt.receiptId} receipt={receipt} onRefresh={refreshDetail} /></div>
         {receipt.status === 'REJECTED' && receipt.rejectReason && <div className="rejection-note"><strong>반려 사유</strong><p>{receipt.rejectReason}</p></div>}
         {receipt.settledAt && <p className="muted">정산일 · {receipt.settledAt}</p>}
       </div>

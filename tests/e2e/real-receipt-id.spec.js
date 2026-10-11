@@ -247,7 +247,7 @@ for (const outcome of ['saved', 'null', 'partial', 'failed']) {
       const method = route.request().method();
       if (method !== 'GET') mutations.push({ path, method, body: route.request().postDataJSON() });
       else if (approved) readsAfterApproval.push(path);
-      const final = approved && outcome === 'saved'
+      const final = !approved || outcome === 'saved'
         ? { merchantName: raw.merchantNameRaw, paidAt: raw.paidAtRaw, amount: raw.amountRaw }
         : { merchantName: approved && outcome === 'partial' ? raw.merchantNameRaw : null, paidAt: null, amount: null };
       const receipt = { id: 801, categoryId: 1, categoryName: '식비', purpose: '직접 승인 확인', submitterName: '사용자', submitter: { name: '사용자' }, status: approved ? 'APPROVED' : 'OCR_DONE', ...final, ocrResult: raw };
@@ -280,13 +280,13 @@ for (const outcome of ['saved', 'null', 'partial', 'failed']) {
     await page.getByRole('link', { name: '승인 관리 →', exact: true }).click();
     await page.locator('.filter-tabs').getByRole('button', { name: '검토 필요', exact: true }).click();
     const detail = page.locator('.approval-detail');
-    await expect(detail.getByText('OCR 가게', { exact: true })).toBeVisible();
+    await expect(detail.getByRole('region', { name: '최종 확정 정보' }).getByText('OCR 가게', { exact: true })).toBeVisible();
     await detail.getByLabel('검토 의견 (선택)').fill('원본 확인 완료');
     await detail.getByRole('button', { name: '승인', exact: true }).click();
     await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '취소', exact: true }).click();
     expect(mutations.filter((item) => item.path.includes('/approve'))).toHaveLength(0);
     await detail.getByRole('button', { name: '승인', exact: true }).click();
-    await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).evaluate((button) => { button.click(); button.click(); });
+    await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '승인하기', exact: true }).evaluate((button) => { button.click(); button.click(); });
     if (outcome === 'failed') {
       await expect(detail.getByRole('alert')).toBeVisible();
       await expect(detail.locator('.status-badge')).toHaveText('OCR 완료');

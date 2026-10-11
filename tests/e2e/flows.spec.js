@@ -88,7 +88,7 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   await detail.getByRole('button', { name: 'OCR 수정 저장' }).click();
   await expect(detail.getByRole('region', { name: '최종 확정 정보' }).getByText('E2E 보정 카페', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '승인', exact: true }).click();
-  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '승인하기', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('승인');
   await detail.getByLabel('정산일', { exact: true }).fill('2026-10-05');
   await detail.getByRole('button', { name: '정산 완료 처리', exact: true }).click();

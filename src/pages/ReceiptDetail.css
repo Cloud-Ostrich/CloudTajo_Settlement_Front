@@ -26,3 +26,21 @@
   .receipt-timeline li { flex-wrap: wrap; gap: 6px; }
   .receipt-timeline time { max-width: 100%; }
 }
+/* 모바일 Safari: auto 높이 + max-height만 있는 flex 모달에서 본문이
+   축소되지 않도록 실제 높이를 지정합니다. PC 레이아웃은 유지합니다. */
+@media (max-width: 699px) {
+  .receipt-detail-dialog {
+    height: calc(100vh - 48px);
+    max-height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+    min-height: 0;
+  }
+  .receipt-detail-dialog-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
