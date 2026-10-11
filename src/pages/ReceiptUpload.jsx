@@ -4,6 +4,7 @@ import { submitReceipt, MAX_RECEIPT_SIZE, RECEIPT_IMAGE_TYPES } from '../api/rec
 import useReceiptPreview from '../hooks/useReceiptPreview';
 import './Receipts.css';
 import './ReceiptUpload.css';
+import '../components/ReceiptUX.css';
 import { useApiData } from '../hooks/useMockData';
 
 function ReceiptUpload() {
@@ -16,6 +17,7 @@ function ReceiptUpload() {
   const [memo, setMemo] = useState(() => typeof resubmission?.memo === 'string' ? resubmission.memo : '');
   const [submitted, setSubmitted] = useState(null);
   const inputRef = useRef(null);
+  const cameraRef = useRef(null);
   const [file, setFile] = useState(null);
   const preview = useReceiptPreview(file);
   const [error, setError] = useState('');
@@ -54,9 +56,10 @@ function ReceiptUpload() {
       <form className="receipt-card review-form" onSubmit={handleExtract}>
         <div className="card-heading"><h2>영수증 이미지</h2></div>
         <input ref={inputRef} id="receipt-file" className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => { selectFile(event.target.files?.[0]); event.target.value = ''; }} />
+        <input ref={cameraRef} id="receipt-camera" className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={busy} onChange={(event) => { selectFile(event.target.files?.[0]); event.target.value = ''; }} />
         <div className={`upload-zone${dragging ? ' dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); if (event.dataTransfer.files.length > 1) { setError('영수증은 한 장씩 등록해주세요.'); return; } selectFile(event.dataTransfer.files[0]); }}>
           {preview ? <img className="receipt-preview" src={preview} alt="선택한 영수증 미리보기" onError={() => { setError('이미지를 읽을 수 없습니다. 다른 파일을 선택해주세요.'); setFile(null); }} /> : <><div className="upload-symbol" aria-hidden="true">↑</div><h3>영수증 사진을 올려주세요</h3></>}
-          <button type="button" className="button secondary" disabled={busy} onClick={() => inputRef.current?.click()}>{file ? '이미지 변경' : '이미지 선택'}</button>
+          <div className="capture-actions"><button type="button" className="button primary" disabled={busy} onClick={() => cameraRef.current?.click()}>사진 촬영</button><button type="button" className="button secondary" disabled={busy} onClick={() => inputRef.current?.click()}>앨범에서 선택</button></div><span className="file-hint">카메라가 열리지 않으면 앨범에서 선택해 주세요.</span>
           <span className="file-hint">JPG, PNG, WEBP · 최대 10MB</span>
         </div>
         {file && <div className="file-details"><span>{file.name} <small>({(file.size / 1024 / 1024).toFixed(2)} MB)</small></span><button type="button" className="text-button" disabled={busy} onClick={() => { setFile(null); setError(''); }}>삭제</button></div>}

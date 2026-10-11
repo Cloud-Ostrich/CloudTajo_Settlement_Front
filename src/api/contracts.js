@@ -22,6 +22,12 @@ export const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 export const REVIEWABLE = ['OCR_DONE', 'REVIEWING'];
 export const money = (value) => value == null ? '인식 대기' : `${value.toLocaleString('ko-KR')}원`;
 export const receiptIdOf = (receipt) => receipt?.receiptId ?? receipt?.id;
+export function submitterLabel(receipt) {
+  const name = [receipt?.submitterName, receipt?.submitter?.name].find((value) => typeof value === 'string' && value.trim());
+  if (name) return name.trim();
+  const id = receipt?.submitterId ?? receipt?.submitter?.id;
+  return id != null ? `사용자 #${id}` : '제출자 정보 없음';
+}
 export function categoryNameFor(receipt, categories) {
   if (receipt?.categoryName) return receipt.categoryName;
   return categories?.find((category) => category.id === receipt?.categoryId)?.name || '카테고리 정보 없음';

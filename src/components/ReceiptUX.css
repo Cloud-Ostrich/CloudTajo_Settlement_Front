@@ -1,0 +1,24 @@
+.capture-actions, .viewer-controls, .viewer-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.capture-actions { justify-content: center; }
+.receipt-image-open { display: block; padding: 0; border: 0; width: 100%; background: transparent; cursor: zoom-in; }
+.ux-dialog { border: 1px solid #d5dfda; border-radius: 16px; padding: 24px; margin: auto; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; color: #233349; }
+.ux-dialog::backdrop { background: #132b24aa; }
+.confirm-dialog { width: 440px; }
+.confirm-dialog h2 { font-size: 20px; margin-bottom: 14px; }
+.confirm-dialog .decision-actions { margin-top: 24px; }
+.image-viewer { width: 1000px; }
+.viewer-toolbar { justify-content: space-between; }
+.viewer-controls { margin: 14px 0; }
+.viewer-controls button { min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px solid #d5dfda; background: #f0faf4; color: #17683e; }
+.viewer-stage { height: min(65dvh, 700px); overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f1f5f3; touch-action: none; cursor: grab; }
+.viewer-stage img { max-width: 90%; max-height: 90%; object-fit: contain; user-select: none; }
+.receipt-progress { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 16px 0; padding: 0; }
+.receipt-progress li { flex: 1 1 110px; padding: 12px; border: 1px solid #dce5df; border-radius: 8px; font-size: 13px; }
+.receipt-progress .complete { background: #f0faf4; color: #17683e; }
+.receipt-progress .current { border: 2px solid #078642; font-weight: 700; }
+.receipt-progress .rejected { border-color: #d96656; background: #fff3f1; }
+.admin-list-controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.admin-list-controls label { flex: 1 1 180px; display: grid; gap: 6px; }
+.admin-list-controls input, .admin-list-controls select { min-width: 0; width: 100%; min-height: 44px; padding: 10px; border: 1px solid #d5dfda; border-radius: 8px; font: inherit; }
+@media (min-width: 701px) { .admin-original { position: sticky; top: 20px; } .admin-original .review-preview { max-height: 70dvh; object-fit: contain; } }
+@media (max-width: 700px) { .ux-dialog { padding: 16px; } .viewer-controls button, .capture-actions button { min-height: 44px; } .admin-page button, .receipt-upload-page button { min-height: 44px; } }

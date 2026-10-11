@@ -1,8 +1,10 @@
+import { historyTimeLabel } from '../api/receiptUX';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { categoryNameFor, historyActionLabel, STATUS_LABELS, money, receiptIdOf, SUBMISSION_SUMMARIES, matchesSubmissionFilter } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
 import { rejectionReasonFor } from '../api/rejectionReason';
+import ReceiptProgress from '../components/ReceiptProgress';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
 import ResubmitReceiptLink from '../components/ResubmitReceiptLink';
@@ -38,6 +40,7 @@ function ReceiptDetail({ id, onClose }) {
     <div className="card-heading receipt-detail-dialog-header"><h2 id="receipt-detail-title">영수증 상세</h2><button type="button" className="modal-close" onClick={onClose} aria-label="영수증 상세 닫기"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
     <div className="receipt-detail-dialog-body">
     {error ? <p className="error-message" role="alert">{error} <button className="text-button" onClick={reload}>다시 시도</button></p> : !receipt ? <p role="status">상세 정보를 불러오는 중…</p> : <>
+      <ReceiptProgress status={receipt.status} histories={timeline} />
       <div className="review-grid">
         <div><h3 className="section-title">원본 영수증</h3><UserReceiptImage receipt={receipt} /></div>
         <div className="receipt-detail-info"><StatusBadge status={receipt.status} /><h3 className="section-title">제출 정보</h3><dl className="detail-fields">
@@ -54,7 +57,9 @@ function ReceiptDetail({ id, onClose }) {
         {settlement?.snapshot?.settledAt && <p className="muted">정산일 · {settlement.snapshot.settledAt}</p>}
         </div>
       </div>
-      {!!timeline.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{timeline.map((item) => <li key={item.id}><div className="timeline-content"><strong>{historyActionLabel(item.action)}</strong>{(item.reason || item.snapshot?.comment) && <p>{item.reason || item.snapshot.comment}</p>}</div><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</time></li>)}</ol></>}
+      {historyError && <p className="error-message" role="alert">처리 이력을 불러오지 못했습니다.</p>}
+      {histories == null && !historyError && <p role="status">처리 이력 불러오는 중…</p>}
+      {!!timeline.length && <><h3 className="section-title">처리 이력</h3><ol className="receipt-timeline">{timeline.map((item) => <li key={item.id}><div className="timeline-content"><strong>{historyActionLabel(item.action)}</strong>{(item.reason || item.snapshot?.comment) && <p>{item.reason || item.snapshot.comment}</p>}</div><time dateTime={item.createdAt}>{historyTimeLabel(item.createdAt)}</time></li>)}</ol></>}
     </>}
     </div>
   </dialog>;

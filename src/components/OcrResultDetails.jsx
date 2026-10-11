@@ -19,8 +19,8 @@ export default function OcrResultDetails({ ocrResult, workflowStatus, waitingMes
 
   return <section className="ocr-result-details" aria-label={finalValues ? '최종 확정 정보' : 'OCR 인식 정보'}>
     <p className="muted" role="status">{isComplete ? 'OCR 인식 완료' : 'OCR 인식 대기'}</p>
-    {!isComplete ? <p className="receipt-tip">{waitingMessage}</p> : !hasDisplayValues ? <p className="receipt-tip">{finalValues ? '인식 정보 없음' : '인식된 정보 없음'}</p> : <>
-      <h3 className="section-title">{displayHeading}</h3>
+    {!isComplete ? <p className="receipt-tip">{waitingMessage}</p> : !hasDisplayValues ? <p className="receipt-tip">{'인식 결과 없음'}</p> : <>
+      <h3 className="section-title">{displayHeading}</h3>{finalValues && <p className="muted">확정값을 우선 표시하며, 미확정 항목은 OCR 원본 인식값입니다.</p>}
       <dl className="detail-fields">
         <div><dt>{finalValues ? '상호명' : 'OCR 원본 상호명'}</dt><dd>{displayValue(displayValues[0])}</dd></div>
         <div><dt>{finalValues ? '결제일' : 'OCR 원본 결제일'}</dt><dd>{displayValue(displayValues[1])}</dd></div>

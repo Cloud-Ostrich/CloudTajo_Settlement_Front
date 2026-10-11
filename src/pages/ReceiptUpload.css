@@ -20,4 +20,4 @@
   .receipt-upload-page .receipt-steps { gap: 16px; font-size: 12px; }
 }
 /* 공유 폼 input 스타일이 숨겨진 파일 입력의 크기를 확장하지 않도록 제한합니다. */
-.receipt-upload-page #receipt-file { width: 1px; height: 1px; padding: 0; border: 0; }
+.receipt-upload-page #receipt-file, .receipt-upload-page #receipt-camera { width: 1px; height: 1px; padding: 0; border: 0; }

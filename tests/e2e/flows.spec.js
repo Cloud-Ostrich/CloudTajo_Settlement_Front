@@ -65,6 +65,7 @@ test('신규 제출/미리보기/상세/OCR_PENDING 유지, 두 USER 분리 및 
   await login(page, 'admin@test.com');
   await page.getByRole('link', { name: '승인 관리', exact: true }).click();
   const adminRow = page.getByRole('row').filter({ hasText: purpose });
+  await expect(adminRow.locator('small')).toHaveText(`김민서 · 식비 · ${purpose}`);
   await adminRow.getByRole('button').click();
   const detail = page.locator('.approval-detail');
   await expect(detail.getByText('김민서', { exact: true })).toBeVisible();
@@ -87,9 +88,11 @@ test('OCR_DONE 샘플 관리자 보정 → 승인 → 정산 완료 → 해당 U
   await detail.getByRole('button', { name: 'OCR 수정 저장' }).click();
   await expect(detail.getByRole('region', { name: '최종 확정 정보' }).getByText('E2E 보정 카페', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '승인', exact: true }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('승인');
   await detail.getByLabel('정산일', { exact: true }).fill('2026-10-05');
   await detail.getByRole('button', { name: '정산 완료 처리', exact: true }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('정산 완료');
   await expect(row).toHaveCount(0); // 사용처가 보정되어 이전 행 텍스트는 사라집니다.
   await logout(page);
@@ -112,6 +115,7 @@ test('별도 요청 반려 사유 필수 → 반려 저장 → 해당 USER 상�
   await expect(detail.getByRole('button', { name: '반려 처리' })).toBeDisabled();
   await detail.getByLabel('반려 사유 (필수)').fill('E2E 참석자 명단을 첨부해주세요.');
   await detail.getByRole('button', { name: '반려 처리' }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).click();
   await expect(detail.locator('.status-badge')).toHaveText('반려');
   await logout(page);
   await login(page, 'user2@test.com');
@@ -156,7 +160,7 @@ test('모바일 영수증 등록: 필수 입력, 미리보기/삭제/재선택, 
   await page.locator('#receipt-file').setInputFiles({ name: 'mobile.png', mimeType: 'image/png', buffer: png });
   await expect(page.getByAltText('선택한 영수증 미리보기')).toBeVisible();
   await expect(page.getByText('mobile.png', { exact: false })).toBeVisible();
-  await expect(page.getByRole('button', { name: '이미지 변경', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '앨범에서 선택', exact: true })).toBeVisible();
   await expect(page.locator('.receipt-steps [aria-current=step]')).toHaveText('2 제출 정보 입력');
   await expect(submitButton).toBeDisabled();
   await page.getByLabel('사용 목적 (필수)').fill('모바일 등록 테스트');
@@ -283,3 +287,80 @@ for (const entry of ['목록', '상세']) {
     await expect(page.getByRole('dialog').locator('.receipt-timeline')).toHaveText(history);
   });
 }
+
+test('촬영·앨범 입력은 같은 검증과 미리보기를 사용하고 재제출에도 제공', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await login(page, 'user1@test.com');
+  await page.getByRole('link', { name: '+ 영수증 등록' }).click();
+  await expect(page.getByRole('button', { name: '사진 촬영', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '앨범에서 선택', exact: true })).toBeVisible();
+  await expect(page.locator('#receipt-camera')).toHaveAttribute('capture', 'environment');
+  await expect(page.locator('#receipt-file')).not.toHaveAttribute('capture');
+  await page.locator('#receipt-camera').setInputFiles({ name: 'bad.txt', mimeType: 'text/plain', buffer: Buffer.from('bad') });
+  await expect(page.getByRole('alert')).toContainText('10MB 이하');
+  await expect(page.getByAltText('선택한 영수증 미리보기')).toHaveCount(0);
+  await page.locator('#receipt-camera').setInputFiles({ name: 'capture.png', mimeType: 'image/png', buffer: png });
+  await expect(page.getByAltText('선택한 영수증 미리보기')).toBeVisible();
+  await page.getByLabel('사용 목적 (필수)').fill('카메라 입력 테스트');
+  await page.getByLabel('카테고리 (필수)').selectOption('1');
+  await page.getByRole('button', { name: '영수증 제출', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '영수증이 제출되었어요' })).toBeVisible();
+  await page.getByRole('link', { name: '내 제출 현황 확인' }).click();
+  await page.getByRole('link', { name: '다시 제출', exact: true }).click();
+  await expect(page.getByRole('button', { name: '사진 촬영', exact: true })).toBeVisible();
+  await expect(page.getByAltText('선택한 영수증 미리보기')).toHaveCount(0);
+});
+
+test('이미지 확대·회전·이동·ESC 종료는 원본과 OCR 수정 입력을 보존', async ({ page }) => {
+  await login(page, 'user1@test.com');
+  await page.locator('.submission-card').filter({ hasText: '그린마트' }).click();
+  const detail = page.getByRole('dialog', { name: '영수증 상세', exact: true });
+  await expect(detail.getByRole('region', { name: '영수증 처리 단계' })).toContainText('반려됨');
+  const originalSrc = await detail.locator('img').getAttribute('src');
+  await detail.getByRole('button', { name: '확대 보기', exact: true }).click();
+  const viewer = page.getByRole('dialog', { name: '영수증 확대 보기', exact: true });
+  await viewer.getByRole('button', { name: '확대', exact: true }).click();
+  await viewer.getByRole('button', { name: '오른쪽 회전', exact: true }).click();
+  await expect(viewer.locator('img')).toHaveAttribute('style', /rotate\(90deg\).*scale\(1.25\)/);
+  const stage = viewer.locator('.viewer-stage');
+  await stage.dispatchEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+  await stage.dispatchEvent('pointermove', { pointerId: 1, clientX: 130, clientY: 150 });
+  await stage.dispatchEvent('pointerup', { pointerId: 1 });
+  await expect(viewer.locator('img')).toHaveAttribute('style', /translate\(30px, 50px\)/);
+  await page.keyboard.press('Escape');
+  await expect(viewer).toHaveCount(0);
+  await expect(detail.locator('img')).toHaveAttribute('src', originalSrc);
+  await detail.getByRole('button', { name: '영수증 상세 닫기' }).click();
+  await logout(page);
+  await login(page, 'admin@test.com');
+  await selectAdmin(page, '카페 그린브릿지');
+  const approval = page.locator('.approval-detail');
+  await approval.getByRole('button', { name: 'OCR 수정', exact: true }).click();
+  await approval.getByLabel('사용처', { exact: true }).fill('수정 중 입력');
+  await approval.getByRole('button', { name: '확대 보기', exact: true }).click();
+  await page.getByRole('dialog', { name: '영수증 확대 보기' }).getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(approval.getByLabel('사용처', { exact: true })).toHaveValue('수정 중 입력');
+  await expect(approval.locator('.admin-original img')).toBeVisible();
+});
+
+test('관리자 검색은 상태 필터와 함께 적용하고 확인 취소는 상태를 보존', async ({ page }) => {
+  await login(page, 'admin@test.com');
+  await page.getByRole('link', { name: '승인 관리', exact: true }).click();
+  await page.getByLabel('영수증 검색', { exact: true }).fill('카페 그린브릿지');
+  await expect(page.locator('.request-table tbody tr')).toHaveCount(1);
+  await page.getByLabel('정렬', { exact: true }).selectOption('amount-desc');
+  await page.locator('.filter-tabs').getByRole('button', { name: '정산 완료', exact: true }).click();
+  await expect(page.getByText('검색 조건에 맞는 영수증이 없습니다.', { exact: true })).toBeVisible();
+  await page.locator('.filter-tabs').getByRole('button', { name: '전체', exact: true }).click();
+  const approval = page.locator('.approval-detail');
+  await approval.getByRole('button', { name: '승인', exact: true }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '취소', exact: true }).click();
+  await expect(approval.locator('.status-badge')).toHaveText('OCR 완료');
+  await approval.getByRole('button', { name: '반려', exact: true }).click();
+  await approval.getByLabel('반려 사유 (필수)').fill('확인 취소');
+  await approval.getByRole('button', { name: '반려 처리', exact: true }).click();
+  await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '취소', exact: true }).click();
+  await expect(approval.locator('.status-badge')).toHaveText('OCR 완료');
+  await page.setViewportSize({ width: 320, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

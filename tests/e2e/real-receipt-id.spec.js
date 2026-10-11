@@ -41,6 +41,45 @@ for (const result of ['reason', 'empty', 'failure']) {
   });
 }
 
+realModeTest('관리자 제출자: 이름·ID·누락을 목록과 상세에서 표시', async ({ page }) => {
+  const identities = [
+    { submitterName: '목록 이름', submitterId: 1, submitter: { name: '상세 이름', id: 1 } },
+    { submitterId: 2 },
+    {},
+  ];
+  const items = identities.map((identity, index) => ({ id: 301 + index, categoryId: 1, purpose: `제출 목적 ${index}`, status: 'OCR_DONE', merchantName: `가게 ${index}`, paidAt: '2026-10-09', amount: 1000, ...identity }));
+  await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let data;
+    if (path === '/api/auth/login') data = { accessToken: 'test-token', user: { id: 3, role: 'ADMIN', name: '관리자' } };
+    else if (path === '/api/admin/dashboard/summary') data = { totalAmount: 0, pendingCount: 3, rejectedCount: 0, categorySummaries: [] };
+    else if (path === '/api/admin/receipts') data = { items };
+    else if (path === '/api/categories') data = [{ id: 1, name: '식비' }];
+    else if (path.endsWith('/histories')) data = [];
+    else if (/\/api\/receipts\/\d+$/.test(path)) {
+      data = { ...items.find((item) => item.id === Number(path.split('/').at(-1))) };
+      delete data.submitterName;
+    } else return route.fulfill({ status: 404, json: { success: false } });
+    await route.fulfill({ json: { success: true, data } });
+  });
+  await page.goto('/');
+  await page.getByLabel('이메일', { exact: true }).fill('admin@test.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('password');
+  await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+  await page.getByRole('link', { name: '승인 관리 →', exact: true }).click();
+  const labels = ['목록 이름', '사용자 #2', '제출자 정보 없음'];
+  for (const [index, label] of labels.entries()) {
+    const row = page.locator('.request-table tbody tr').filter({ hasText: `제출 목적 ${index}` });
+    await expect(row.locator('small')).toHaveText(`${label} · 식비 · 제출 목적 ${index}`);
+    await row.getByRole('button').click();
+    const detail = page.locator('.approval-detail');
+    await expect(detail.locator('.detail-fields > div').filter({ hasText: '제출자' }).locator('dd')).toHaveText(index === 0 ? '상세 이름' : label);
+    await expect(detail.getByRole('button', { name: '승인', exact: true })).toBeEnabled();
+  }
+  await page.setViewportSize({ width: 320, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 realModeTest('Real 반려 재제출: 상태별 버튼, 상세 정보 재사용, 신규 POST만 호출', async ({ page }) => {
   const mutations = [];
   let attempts = 0;
@@ -89,7 +128,7 @@ realModeTest('Real 반려 재제출: 상태별 버튼, 상세 정보 재사용, 
   await expect(page.locator('#receipt-file')).toHaveValue('');
   const submit = page.getByRole('button', { name: '영수증 제출', exact: true });
   await expect(submit).toBeDisabled();
-  await page.locator('#receipt-file').setInputFiles({ name: 'new-image.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64') });
+  await page.locator('#receipt-camera').setInputFiles({ name: 'new-image.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64') });
   await submit.click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByLabel('메모 (선택)')).toHaveValue('상세 메모');
@@ -182,7 +221,7 @@ realModeTest('관리자 목록: 필요한 상세만 조회하고 최종값/OCR/�
   await expect(row('승인 보완')).toContainText('상세 OCR 907');
   await expect.poll(() => reads.includes(905)).toBe(true);
   await expect(row('조회 실패')).toContainText('5,000원');
-  await expect(row('조회 실패')).toContainText('OCR 인식 대기');
+  await expect(row('조회 실패')).toContainText('인식 결과 없음');
   await expect(row('처리 대기')).toContainText('OCR 인식 대기');
   expect(reads).not.toContain(902);
   expect(reads).not.toContain(906);
@@ -244,6 +283,10 @@ for (const outcome of ['saved', 'null', 'partial', 'failed']) {
     await expect(detail.getByText('OCR 가게', { exact: true })).toBeVisible();
     await detail.getByLabel('검토 의견 (선택)').fill('원본 확인 완료');
     await detail.getByRole('button', { name: '승인', exact: true }).click();
+    await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '취소', exact: true }).click();
+    expect(mutations.filter((item) => item.path.includes('/approve'))).toHaveLength(0);
+    await detail.getByRole('button', { name: '승인', exact: true }).click();
+    await page.getByRole('dialog', { name: '처리 확인' }).getByRole('button', { name: '확인', exact: true }).evaluate((button) => { button.click(); button.click(); });
     if (outcome === 'failed') {
       await expect(detail.getByRole('alert')).toBeVisible();
       await expect(detail.locator('.status-badge')).toHaveText('OCR 완료');
@@ -434,7 +477,7 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await approvalDetail.getByRole('button', { name: '취소', exact: true }).click();
   await page.getByRole('button', { name: /인식 정보 없는 영수증/ }).click();
   await expect(approvalDetail.getByText('OCR 인식 완료', { exact: true })).toBeVisible();
-  await expect(approvalDetail.getByText('인식 정보 없음', { exact: true })).toBeVisible();
+  await expect(approvalDetail.getByText('인식 결과 없음', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /최종값 우선 확인/ }).click();
   await expect(approvalDetail.getByRole('region', { name: '최종 확정 정보' }).getByText('확정 상호', { exact: true })).toBeVisible();
   await expect(approvalDetail.getByRole('region', { name: '최종 확정 정보' }).getByText('다른 원본 상호', { exact: true })).toHaveCount(0);
