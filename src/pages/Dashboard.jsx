@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { categoryNameFor, historyActionLabel, STATUS_LABELS, money, receiptIdOf, SUBMISSION_SUMMARIES, matchesSubmissionFilter } from '../api/contracts';
 import { useApiData } from '../hooks/useMockData';
+import { rejectionReasonFor } from '../api/rejectionReason';
 import StatusBadge from '../components/StatusBadge';
 import UserReceiptImage from '../components/UserReceiptImage';
 import ResubmitReceiptLink from '../components/ResubmitReceiptLink';
@@ -16,9 +17,9 @@ function ReceiptDetail({ id, onClose }) {
   const receipt = response && { ...response, receiptId: receiptIdOf(response) };
   const { data: categories } = useApiData(receipt && !receipt.categoryName ? '/categories' : null);
   const categoryName = categoryNameFor(receipt, categories);
-  const { data: histories } = useApiData(`/receipts/${id}/histories`);
+  const { data: histories, error: historyError } = useApiData(`/receipts/${id}/histories`);
   const timeline = histories || [];
-  const rejection = [...timeline].reverse().find((item) => item.action === 'REJECTED');
+  const rejectionReason = rejectionReasonFor(receipt, timeline);
   const settlement = [...timeline].reverse().find((item) => item.action === 'SETTLED');
   const dialogRef = useRef(null);
   useEffect(() => {
@@ -48,7 +49,7 @@ function ReceiptDetail({ id, onClose }) {
         </dl>
         {!processing && hasFinalOcr && <FinalOcrDetails receipt={receipt} />}
         <OcrResultDetails ocrResult={receipt.ocrResult} workflowStatus={receipt.status} waitingMessage={processing ? (receipt.status === 'OCR_PENDING' ? 'OCR 처리 중입니다.' : '영수증이 제출되었습니다. OCR 처리를 기다리고 있습니다.') : 'OCR 결과가 없습니다.'} />
-        {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p>{rejection?.reason || '등록된 반려 사유가 없습니다.'}</p></div>}
+        {receipt.status === 'REJECTED' && <div className="rejection-note"><strong>반려 사유</strong><p role="status">{rejectionReason || (historyError ? '반려 사유를 불러오지 못했습니다.' : histories == null ? '반려 사유를 불러오는 중…' : '등록된 반려 사유가 없습니다.')}</p></div>}
         <ResubmitReceiptLink receipt={receipt} />
         {settlement?.snapshot?.settledAt && <p className="muted">정산일 · {settlement.snapshot.settledAt}</p>}
         </div>

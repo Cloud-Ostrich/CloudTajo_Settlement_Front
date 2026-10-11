@@ -2,6 +2,45 @@ import { test, expect } from '@playwright/test';
 
 const realModeTest = process.env.VITE_API_MODE === 'real' ? test : test.skip;
 
+for (const result of ['reason', 'empty', 'failure']) {
+  realModeTest(`사용자 반려 사유의 이력 재사용 및 로딩: ${result}`, async ({ page }) => {
+    let release;
+    const ready = new Promise((resolve) => { release = resolve; });
+    const reads = [];
+    await page.route('http://127.0.0.1:5181/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      reads.push(path);
+      let data;
+      if (path === '/api/auth/login') data = { accessToken: 'test-token', user: { id: 2, role: 'USER', name: '사용자' } };
+      else if (path === '/api/receipts/my') data = { items: [{ id: 27, purpose: '반려 확인', status: 'REJECTED' }] };
+      else if (path === '/api/receipts/27') data = { id: 27, status: 'REJECTED', purpose: '반려 확인', categoryName: '식비' };
+      else if (path === '/api/receipts/27/histories') {
+        await ready;
+        if (result === 'failure') return route.fulfill({ status: 500, json: { success: false } });
+        data = result === 'empty' ? [] : [
+          { id: 104, action: 'REJECT', reason: '영수증 이미지가 흐려 금액을 확인하기 어려움', createdAt: '2026-10-10T20:25:32' },
+          { id: 90, action: 'REJECTED', reason: '이전 사유', createdAt: '2026-10-09T20:25:32' },
+        ];
+      } else return route.fulfill({ status: 404, json: { success: false } });
+      await route.fulfill({ json: { success: true, data } });
+    });
+    await page.goto('/');
+    await page.getByLabel('이메일', { exact: true }).fill('user@test.com');
+    await page.getByLabel('비밀번호', { exact: true }).fill('password');
+    await page.getByRole('button', { name: '로그인 →', exact: true }).click();
+    await page.locator('.submission-card').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('.rejection-note')).toContainText('반려 사유를 불러오는 중…');
+    await expect(dialog.locator('.rejection-note')).not.toContainText('등록된 반려 사유가 없습니다.');
+    release();
+    const expected = result === 'reason' ? '영수증 이미지가 흐려 금액을 확인하기 어려움' : result === 'empty' ? '등록된 반려 사유가 없습니다.' : '반려 사유를 불러오지 못했습니다.';
+    await expect(dialog.locator('.rejection-note p')).toHaveText(expected);
+    if (result === 'reason') await expect(dialog.locator('.receipt-timeline')).toContainText(expected);
+    await expect(dialog.getByRole('link', { name: '다시 제출', exact: true })).toBeVisible();
+    expect(reads.every((path) => ['/api/auth/login', '/api/receipts/my', '/api/receipts/27', '/api/receipts/27/histories'].includes(path))).toBe(true);
+  });
+}
+
 realModeTest('Real 반려 재제출: 상태별 버튼, 상세 정보 재사용, 신규 POST만 호출', async ({ page }) => {
   const mutations = [];
   let attempts = 0;
