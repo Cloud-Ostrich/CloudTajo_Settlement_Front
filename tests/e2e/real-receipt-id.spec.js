@@ -466,7 +466,7 @@ realModeTest('Real 관리자 summary 요청에 YYYY-MM month를 전달', async (
   await page.goto('/admin/approvals');
   const approvalDetail = page.locator('.approval-detail');
   await expect(approvalDetail.getByText('OCR 인식 완료', { exact: true })).toBeVisible();
-  await expect(approvalDetail.getByRole('heading', { name: 'OCR 결과' })).toBeVisible();
+  await expect(approvalDetail.getByRole('heading', { name: '영수증 정보 (확정값·OCR 원본)', exact: true })).toBeVisible();
   await expect(approvalDetail.getByRole('heading', { name: 'OCR 인식 결과(관리자 검토 전)' })).toHaveCount(0);
   await expect(approvalDetail.getByText('원본 상호', { exact: true })).toBeVisible();
   await expect(approvalDetail.getByText('신뢰도 정보 없음', { exact: true })).toBeVisible();

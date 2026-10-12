@@ -47,31 +47,6 @@ async function setup(page, final, outcome = 'saved') {
   state.count = async () => real ? state.approvals : page.evaluate(() => window.__approvalAttempts);
   return { state, detail };
 }
-for (const [name, final, labels] of [
-  ['상호명', { ...complete, merchantName: null }, ['상호명']],
-  ['결제일', { ...complete, paidAt: null }, ['결제일']],
-  ['금액', { ...complete, amount: null }, ['금액']],
-  ['여러 항목', { merchantName: null, paidAt: null, amount: null }, ['상호명', '결제일', '금액']],
-]) test(`${name} 확정값 누락: 취소는 요청 없음, 그래도 승인하기는 한 번 호출`, async ({ page }) => {
-  const { state, detail } = await setup(page, final);
-  await detail.getByRole('button', { name: '승인', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '처리 확인' });
-  await expect(dialog.getByRole('heading')).toHaveText('⚠️ 영수증 필수 정보가 누락되었습니다');
-  await expect(dialog.locator('li')).toHaveText(labels);
-  await expect(dialog.getByRole('button', { name: '승인하기', exact: true })).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: '그래도 승인하기' })).toBeVisible();
-  if (labels.includes('결제일') || labels.includes('금액')) await expect(dialog).toContainText('Cloud Insight 이상 데이터 탐지 대상');
-  else await expect(dialog).not.toContainText('Cloud Insight');
-  if (labels.includes('상호명')) await expect(dialog).toContainText('상호명 누락은 데이터 완성도 문제');
-  await dialog.getByRole('button', { name: '취소', exact: true }).click();
-  expect(await state.count()).toBe(0);
-  await detail.getByRole('button', { name: '승인', exact: true }).click();
-  await dialog.getByRole('button', { name: '그래도 승인하기', exact: true }).evaluate(button => { button.click(); button.click(); });
-  if (real) await expect(detail.locator('.status-badge')).toHaveText('승인');
-  else await expect(detail.getByRole('alert')).toBeVisible(); // 기존 Mock API의 누락값 거부는 유지
-  expect(await state.count()).toBe(1);
-  if (real) { expect(state.patches).toBe(0); expect(state.approvalBodies).toEqual([{ comment: '' }]); }
-});
 test('모든 확정값 정상: 취소는 요청 없음, 연속 확인은 승인 한 번', async ({ page }) => {
   const { state, detail } = await setup(page, complete);
   const dialog = page.getByRole('dialog', { name: '처리 확인' });
@@ -86,8 +61,7 @@ test('모든 확정값 정상: 취소는 요청 없음, 연속 확인은 승인 
 });
 for (const outcome of real ? ['saved', 'failed', 'null', 'refresh-failed'] : ['saved']) test(`OCR 수정 후 상세 확정값 재검증: ${outcome}`, async ({ page }) => {
   const { state, detail } = await setup(page, { merchantName: null, paidAt: null, amount: null }, outcome);
-  await detail.getByRole('button', { name: '승인', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'OCR 정보 수정하기' }).click();
+  await detail.getByRole('button', { name: 'OCR 수정', exact: true }).click();
   if (real) await expect(detail.getByLabel('사용처', { exact: true })).toHaveValue('원본 상호');
   await detail.getByLabel('사용처', { exact: true }).fill(complete.merchantName);
   await detail.getByLabel('결제일', { exact: true }).fill(complete.paidAt);
@@ -111,16 +85,31 @@ for (const outcome of real ? ['saved', 'failed', 'null', 'refresh-failed'] : ['s
   } else await expect(detail.getByText('OCR 결과를 수정했습니다.', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '승인', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '처리 확인' });
-  if (outcome === 'saved') {
-    await expect(dialog.getByRole('button', { name: '승인하기', exact: true })).toBeVisible();
-    await dialog.getByRole('button', { name: '승인하기', exact: true }).click();
-    await expect(detail.locator('.status-badge')).toHaveText('승인');
-    expect(await state.count()).toBe(1);
-  } else {
-    await expect(dialog.locator('li')).toHaveText(['상호명', '결제일', '금액']);
-    expect(await state.count()).toBe(0);
-    await dialog.getByRole('button', { name: '그래도 승인하기' }).click();
-    await expect(detail.locator('.status-badge')).toHaveText('승인');
-    expect(await state.count()).toBe(1);
+  await expect(dialog.getByRole('heading')).toHaveText('이 영수증을 승인하시겠습니까?');
+  await dialog.getByRole('button', { name: '승인하기', exact: true }).click();
+  await expect(detail.locator('.status-badge')).toHaveText('승인');
+  expect(await state.count()).toBe(1);
+});
+
+for (const [name, final, missing] of [
+  ['저장된 정상 숫자 금액', complete, []],
+  ['저장된 정상 문자열 금액', { ...complete, amount: '5000' }, []],
+  ['정상 0 금액', { ...complete, amount: 0 }, []],
+  ['실제 상호명 누락', { ...complete, merchantName: null }, ['상호명']],
+  ['실제 결제일 누락', { ...complete, paidAt: '' }, ['결제일']],
+  ['실제 금액 누락', { ...complete, amount: null }, ['금액']],
+]) test(`읽기·확인창만: ${name}`, async ({ page }) => {
+  const { state, detail } = await setup(page, final);
+  const stored = detail.locator('.admin-final-actions .detail-fields > div');
+  for (const [index, field] of ['merchantName', 'paidAt', 'amount'].entries()) {
+    const label = ['상호명', '결제일', '금액'][index];
+    await expect(stored.nth(index)).toContainText(missing.includes(label) ? '미저장' : field === 'amount' && typeof final[field] === 'number' ? final[field].toLocaleString('ko-KR') : String(final[field]));
   }
+  await detail.getByRole('button', { name: '승인', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '처리 확인' });
+  await expect(dialog.getByRole('heading')).toHaveText('이 영수증을 승인하시겠습니까?');
+  await expect(dialog.locator('li')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '승인하기', exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '취소', exact: true }).click();
+  expect(await state.count()).toBe(0);
 });
